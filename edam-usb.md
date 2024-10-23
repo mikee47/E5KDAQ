@@ -74,7 +74,7 @@ e.g. do_module_config_request()
 118: 03 00 04 00 00 00 00 00   version[0..15]
 126:
 
-Misc Options 0x9005
+Misc Options 0x0590
 
 0000 0101 1001 0000
 

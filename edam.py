@@ -1,8 +1,50 @@
 import usb.core
 import struct
-import binascii
+from dataclasses import dataclass
 
 PACKET_SIZE = 64
+
+IpAddress = bytes
+MacAddress = bytes
+
+@dataclass
+class ModuleConfig:
+    mac: MacAddress
+    mask: IpAddress
+    ip: IpAddress
+    gw: IpAddress
+    id: int
+    module_name: str
+    module_desc: str
+    event_sip: list[IpAddress]
+    event_trigger: list[bool]
+    stream_sip: list[IpAddress]
+    stream_active: list[bool]
+    stream_time_interval: int
+    baudrate: int
+    misc_options: int
+    options: int
+    version: str
+
+    def __init__(self, data: bytes):
+        values = struct.unpack('<6s4s4s4s1B8s32s4s4s4s4s4?4s4s4s4s4?xLBxHH16s', data)
+        self.mac = values[0]
+        self.mask = values[1]
+        self.ip = values[2]
+        self.gw = values[3]
+        self.id = values[4]
+        self.module_name = values[5].decode().rstrip('\0')
+        self.module_desc = values[6].decode().rstrip('\0')
+        self.event_sip = values[7:11]
+        self.event_trigger = values[11:15]
+        self.stream_sip = values[15:19]
+        self.stream_active = values[19:23]
+        self.stream_time_interval = values[23]
+        self.baudrate = values[24]
+        self.misc_options = values[25]
+        self.options = values[26]
+        self.version = values[27]
+
 
 class E5KDAQ:
     '''Python implementation of InLog E5KDAQ interface.
@@ -98,7 +140,9 @@ def main():
     data = struct.pack('>BBBB', id, 0x46, 0x30, 0)
     rsp = send_hex_request(data)
 
-    print(binascii.hexlify(rsp, ' '))
+    config = ModuleConfig(rsp[3:])
+    print(config)
+    print(f'{config.misc_options=:x}, {config.options=:x}')
 
 
 if __name__ == '__main__':
