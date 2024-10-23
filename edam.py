@@ -5,6 +5,9 @@ class E5KDAQ:
     '''Python implementation of InLog E5KDAQ interface.
     Communication method is abstracted to an inherited class.
     '''
+    def __init__(self, device_id: int):
+        self.device_id = device_id
+
     def flush(self):
         raise NotImplemented()
 
@@ -31,9 +34,12 @@ class USBDAQ(E5KDAQ):
             pass
 
     def send_cmd(self, cmd: bytes):
+        cmd += b'\r'
+        # MAGIC: 88 33 55 77 .3Uw
         buf = struct.pack('<LH', 0x77553388, len(cmd)) + cmd
         print('>', len(cmd), cmd)
-        self.ep0.write(buf.ljust(64, b'\0'))
+        block_count = (len(buf) + 63) // 64
+        self.ep0.write(buf.ljust(block_count * 64, b'\0'))
         buf = bytes(self.ep1.read(64))
         hdr, rsplen = struct.unpack('<LH', buf[:6])
         rsp = buf[6:6+rsplen]
@@ -44,19 +50,31 @@ class USBDAQ(E5KDAQ):
 
 
 def main():
-    daq = USBDAQ()
+    daq = USBDAQ(0)
     daq.open()
 
-    # cmd = b'\x88\x33\x55\x77\x05\x00\x00\x00$00F\r'.ljust(64, b'\0')
-    daq.send_cmd(b'$00IM\r')
-    daq.send_cmd(b'$00F\r')
-    daq.send_cmd(b'$00MISC\r')
-    daq.send_cmd(b'$00M\r')
-    daq.send_cmd(b'^00MAC\r')
-    daq.send_cmd(b'$00P\r')
-    daq.send_cmd(b'#00\r')
-    daq.send_cmd(b'$003\r')
-    daq.send_cmd(b'$008C0\r')
+    daq.send_cmd(b'$00IM')
+    daq.send_cmd(b'$00F')
+    daq.send_cmd(b'$00MISC')
+    daq.send_cmd(b'$00M')
+    daq.send_cmd(b'^00MAC')
+    daq.send_cmd(b'$00P')
+    daq.send_cmd(b'#00')
+    daq.send_cmd(b'$003')
+    daq.send_cmd(b'$008C0')
+    # daq.send_cmd(b'@010000')
+    daq.send_cmd(b'$01CRC')
+    daq.send_cmd(b'@01') # DIO status
+
+    id = 0x01
+    addr = 10064
+    # Read coil status
+    data = struct.pack('>BBHH', id, 0x01, addr, 1)
+    daq.send_cmd(data)
+
+    # Write single coil
+    data = struct.pack('>BBHH', id, 0x05, addr, 0x0001)
+    daq.send_cmd(data)
 
 
 if __name__ == '__main__':
