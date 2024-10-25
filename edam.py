@@ -168,6 +168,7 @@ def main():
     send_asc_request('#00', 'Read all analogue inputs')
     send_asc_request('$003', 'Read CJC temperature')
     send_asc_request('$008C0', 'Read single A/D channel range')
+
     # daq.send_cmd(b'@010000')
     send_asc_request('$01CRC', 'Read CRC status')
     send_asc_request('@01', 'Read DIO status')
@@ -178,14 +179,16 @@ def main():
     send_asc_request('$01GATE', 'Read gateway address')
     send_asc_request('$01MASK', 'Read network mask')
 
-    # ip = [192, 168, 1, 11]
-    # gw = [192, 168, 1, 1]
-    # mask = [255, 255, 255, 0]
-    # def hex_str(x: list[int]):
-    #     return hexlify(bytes(x)).decode().upper()
-    # send_asc_request('$01IP' + hex_str(ip))
-    # send_asc_request('$01GATE' + hex_str(gw))
-    # send_asc_request('$01MASK' + hex_str(mask))
+
+    if False:
+        ip = [192, 168, 1, 11]
+        gw = [192, 168, 1, 1]
+        mask = [255, 255, 255, 0]
+        def hex_str(x: list[int]):
+            return hexlify(bytes(x)).decode().upper()
+        send_asc_request('$01IP' + hex_str(ip), 'Set IP')
+        send_asc_request('$01GATE' + hex_str(gw), 'Set GW')
+        send_asc_request('$01MASK' + hex_str(mask), 'Set Mask')
 
     id = 0x01
     addr = 10064
@@ -220,6 +223,9 @@ def main():
 
     # Read channels burnout status
     send_asc_request('$01B', 'Read channels burnout status')
+
+    # E5K_ReadAIChannelConfig
+    send_asc_request('$01G00', 'Read AI channel config')
 
     if False:
         # E5K_ReadAICalibrationCoefficient

@@ -117,6 +117,7 @@ READ 0x41:
 25: 10 10 10 10 10 10 10 10 " 8-15
 33: 10                      Presumably for CJC
 
+Information returned from `E5K_GetModuleIOChannels`.
 
 
 ## E5K_ReadAllDataFromModule
@@ -282,3 +283,52 @@ E5K_STATUS E5K_CalibrateAIZeroSpan(MODULE_ID id, USHORT Calchno, CHAR Adtype);
 ## E5K_ReadAIChannelConfig
 
 "$AAGcc"
+
+Read AI channel config
+> 6 $01G00
+< 26 b'!01101000**+0.0000+0.0000\r'
+
+ 0 !01
+ 3 10       0x10 wType
+ 5 1        0x01 wActive
+ 6 0        0x00 wInAverage
+ 7 0        0x00 wHiAlarmMode ('L' -> 2, 'M' -> 1, other -> 0)
+ 8 0        0x00 wLoAlarmMode
+ 9 *        wHiAlarmDo: '*' -> 0xff, other -> hex digit value
+10 *        wLoAlarmDo
+11 +0.0000  fHighLimit. For writing "%c%00004d.%01d"
+18 +0.0000  fLowLimit
+
+E5K_SetAIChannelConfig
+
+"$AAGcc..."
+
+Data format same as for reading.
+
+
+## Multi-channel reads
+
+Use undocumented modbus register ranges with `read input register` command 0x06.
+One reason for this could be that the data is unambiguously returned in binary format.
+
+`E5K_ReadMultiChannelColdJunctionOffset` @ 366
+`E5K_ReadMultiDICounter` @ 700, each register is 32 bits (i.e. 2 modbus registers)
+`E5K_ReadAINormalMultiChannel` @ 1500
+`E5K_ReadAIMaximumMultiChannel` @ 1600
+`E5K_ReadAIMinimumMultiChannel` @ 1700
+
+
+## E5K_SetDOMultipleChannels
+
+E5K_STATUS  E5K_SetDOMultipleChannels  (MODULE_ID id,ULONG dwActchn,UCHAR bMode);
+
+Uses undocumented "#AAEmcccccccc"
+
+m = bMode
+cccccccc = dwActchn
+
+
+## E5K_StartMultipleDOPulse
+
+Just repeats `Write Single Do Pulse Counts` and `Start/Stop DO Pulse Counts` for each channel.
+
