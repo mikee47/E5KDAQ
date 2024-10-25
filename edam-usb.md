@@ -37,8 +37,8 @@ e.g. do_module_config_request()
           0x31
           0x32
           0x33
-          0x40
-          0x41
+          0x40: READ
+          0x41: READ channel types?
 0x03 BYTE unused
 0x04 data[]
 
@@ -94,3 +94,191 @@ Misc Options 0x0590
 13: 0  Protocol (ASCII)
 14: 00 50Hz
 
+
+`ModuleConfigX` contains additional "%AAGETFIXADDR\r" command.
+
+```
+> 13 %01GETFIXADDR
+< 34 b'!01C0A8010BC0A80101FFFFFF00000A00\r'
+```
+
+READ 0x41:
+
+< 37
+01 46 41
+90 05 c0 a8 01 0b ff ff ff 00 c0 a8 01 01 00 00 00 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10
+
+ 0: 90 05                   0x0590 Same as from MISC command
+ 2: c0
+ 3: a8 01 0b ff ff ff 00 c0 a8 01 01
+14: 00 00                   digital input types
+16: 00                      digital output type
+17: 10 10 10 10 10 10 10 10 analogue input types 0-7
+25: 10 10 10 10 10 10 10 10 " 8-15
+33: 10                      Presumably for CJC
+
+
+
+## E5K_ReadAllDataFromModule
+
+Code appears model-specific.
+
+```
+struct MODULE_DATA
+{
+  0     ULONG     Din;
+  4     ULONG     Dout;
+  8     ULONG     DiLatch;
+ 12     ULONG     DiCounter[32]; // 32*4 = 128
+ 140    double    AiNormalValue[16]; // 16*8 = 128
+ 268    double    AiMaxValue[16];
+ 396    double    AiMinValue[16];
+ 524    USHORT    AiHighAlarmstatus;
+ 526    USHORT    AiLowAlarmstatus;
+ 528    USHORT    AiBurnOut ;                     //EDAM 5019/5015/5039 only
+ 530    double    CJCTemperature  ;               //EDAM 5019/5039 only//
+ 538    double    AoValue[16];
+ 666
+} MODULE_DATA;
+```
+
+module_config_request(0x40) returns 280 bytes:
+
+01 46 00           HEADER
+  0:    00
+  1:    00 00 00 00
+  5:    00 00 00 01
+  9:    00 00 00 00
+
+ 13:    00 00 00 00     ULONG[32] big endian: DiCounter ?
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        
+141:    7f ff
+        00 00
+        00 00
+        00 00
+        00 00
+        00 00
+        00 00
+        00 00
+        00 00
+        00 00
+        00 00
+        00 00
+        00 00
+        7f ff
+        00 00
+        7f ff
+        
+173:    7f ff
+        00 00
+        00 00
+        00 00
+        00 00
+        00 00
+        00 00
+        00 00
+        00 00
+        00 00
+        00 00
+        00 00
+        00 00
+        7f ff
+        00 00
+        7f ff
+
+205:    7f ff
+        00 00
+        00 00
+        00 00
+        00 00
+        00 00
+        00 00
+        00 00
+        00 00
+        00 00
+        00 00
+        00 00
+        00 00
+        7f ff
+        00 00
+        7f ff
+
+237:    00 00
+        00 00
+        a0 01
+        00 ee
+
+245:    00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+        00 00 00 00
+
+ 
+MODULE_DATA::Din = (buf[1] * 0x1000000) + (buf[2] * 0x10000) + (buf[3] * 0x100) + buf[4];
+
+
+## Calibration
+
+E5K_STATUS E5K_ReadAICalibrationCoefficient(MODULE_ID id, ULONG* Coefficient, CHAR Regtype);
+
+    Regtype can be 0x01 or 0x02.
+
+    0x01: "~AACALZ"
+    0x02: "~AACALS"
+
+
+E5K_STATUS E5K_WriteAICalibrationCoefficient(MODULE_ID id, ULONG Coefficient, CHAR Regtype);
+
+    "~AACALZnnnnnnnn"
+    "~AACALSnnnnnnnn"
+
+    nnnnnnnn == co-efficient hex string
+
+
+E5K_STATUS E5K_CalibrateAIZeroSpan(MODULE_ID id, USHORT Calchno, CHAR Adtype);
+
+    "$AACALcctt"
+
+    cc == calchno
+    tt == adtype
+
+
+## E5K_ReadAIChannelConfig
+
+"$AAGcc"
