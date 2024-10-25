@@ -1,16 +1,106 @@
 import usb.core
 import struct
-from binascii import hexlify
+from enum import IntEnum
 from dataclasses import dataclass
+from collections.abc import Sequence
 
 PACKET_SIZE = 64
 
 IpAddress = bytes
 MacAddress = bytes
 
+class ModbusFunction(IntEnum):
+	ReadCoils = 0x01                                                                                                
+	ReadDiscreteInputs = 0x02                                                                                       
+	ReadHoldingRegisters = 0x03                                                                                     
+	ReadInputRegisters = 0x04                                                                                       
+	WriteSingleCoil = 0x05                                                                                          
+	WriteSingleRegister = 0x06                                                                                      
+	ReadExceptionStatus = 0x07                                                                                      
+	GetComEventCounter = 0x0b                                                                                       
+	GetComEventLog = 0x0c                                                                                           
+	WriteMultipleCoils = 0x0f                                                                                       
+	WriteMultipleRegisters = 0x10                                                                                   
+	ReportServerId = 0x11                                                                                           
+	MaskWriteRegister = 0x16                                                                                        
+	ReadWriteMultipleRegisters = 0x17
+
+
+class State(IntEnum):
+    active_low = 0
+    active_high = 1
+
+
+class DataFormat(IntEnum):
+    engineering = 0
+    binary = 1 # 2's complement
+
+
+class Protocol(IntEnum):
+    ascii = 0
+    modbus = 1
+
+
+class FilterFreq(IntEnum):
+    freq_50hz = 0
+    freq_60hz = 1
+    freq_60hz2 = 2
+    freq_120hz = 3
+
+@dataclass
+class MiscOptions:
+    save_DO_power_on_value: bool    # Save current DO status as power on value and write to eeprom
+    save_DO_safe_value: bool        # Save current DO status as safe value and write to eeprom
+    enable_power_on_value: bool     # Enable/disable power on value function//
+    enable_safe_value: bool         # Enable/disable safe value function//
+    enable_burn_out_detect: bool    # Enable/disable burn out detection //
+    di_active: State                # DI active state 0=low active, 1=high active
+    do_active: State                # DO active state 0=low active, 1=high active
+    enable_dhcp: bool               # DHCP 0=disable, 1=enable
+    enable_webserver: bool          # WebServer 0=disable, 1=enable
+    enable_modbus_crc: bool         # Modbus CRC 0=disable, 1=enable
+    enable_cjc: bool                # Enable/disable CJC, 0=disable, 1=enable (for EDAM5019/5039 only)
+    ascii_data_format: DataFormat   # ASCII data format 0=enginerring, 1=2's
+    modbus_data_format: DataFormat  # MODBUS data format 0=enginerring, 1=2's
+    protocol: Protocol              # Protocol 0=ASCII, 1=MODBUS
+    filter_freq: FilterFreq         # 00=50Hz, 01=60Hz, 10=60Hz, 11=120Hz
+
+    FIELDS = {
+        'save_DO_power_on_value': 0,
+        'save_DO_safe_value': 1,
+        'enable_power_on_value': 2,
+        'enable_safe_value': 3,
+        'enable_burn_out_detect': 4,
+        'di_active': 5,
+        'do_active': 6,
+        'enable_dhcp': 7,
+        'enable_webserver': 0x100,
+        'enable_modbus_crc': 0x200,
+        'enable_cjc': 0x400,
+        'ascii_data_format': 0x800,
+        'modbus_data_format': 0x1000,
+        'protocol': 0x2000,
+    }
+
+    def __init__(self, value: int):
+        for i, fld in enumerate(self.__dataclass_fields__.values()):
+            if fld.name == 'filter_freq':
+                self.filter_freq = FilterFreq(value >> 14)
+            else:
+                setattr(self, fld.name, fld.type((value >> i) & 0x0001))
+
+
+@dataclass
+class Options:
+    pass
+
+def hex_to_str(data: bytes) -> str:
+    return data.hex(' ')
+
+
 def int_to_temp(value: int, scale: float = 1370.0):
     '''Obtain temperature values'''
-    if isinstance(value, list):
+    if isinstance(value, Sequence):
         return [int_to_temp(x) for x in value]
     return round(value * scale / 32767, 1)
 
@@ -30,7 +120,7 @@ class ModuleConfig:
     stream_active: list[bool]
     stream_time_interval: int
     baudrate: int
-    misc_options: int
+    misc_options: MiscOptions
     options: int
     version: str
 
@@ -51,7 +141,7 @@ class ModuleConfig:
         self.stream_active = values[19:23]
         self.stream_time_interval = values[23]
         self.baudrate = values[24]
-        self.misc_options = values[25]
+        self.misc_options = MiscOptions(values[25])
         self.options = values[26]
         self.version = values[27]
 
@@ -71,17 +161,18 @@ class ModuleData:
     cjc_temperature: float
     ao_value: list[float]
 
-    def __init__(self, data: bytes):
-        # values = struct.unpack(self.FORMAT, data)
+    FORMAT = '>x3L32L16h16h16h4H16h'
 
-        values = struct.unpack('>x3L32L16h16h16h4H16h', data)
+    def __init__(self, data: bytes):
+        values = struct.unpack(self.FORMAT, data)
         self.d_in = values[0]
         self.d_out = values[1]
         self.di_latch = values[2]
         self.di_counter = values[3:35]
-        self.ai_normal_value = [int_to_temp(x) for x in values[35:51]]
-        self.ai_max_value = [int_to_temp(x) for x in values[51:67]]
-        self.ai_min_value = [int_to_temp(x) for x in values[67:83]]
+        # TODO: Values depend on configured channel type
+        self.ai_normal_value = int_to_temp(values[35:51])
+        self.ai_max_value = int_to_temp(values[51:67])
+        self.ai_min_value = int_to_temp(values[67:83])
         self.ai_high_alarm_status = values[83]
         self.ai_low_alarm_status = values[84]
         self.ai_burnout = values[85]
@@ -146,16 +237,16 @@ def main():
 
     def send_asc_request(request: str, comment: str):
         print(comment)
-        print('>', len(request), request)
+        print(f'> {len(request):3d}: {request}')
         response = daq.send_request(request.encode() + b'\r')
-        print('<', len(response), response)
+        print(f'< {len(response):3d}: {response}')
         return response
 
     def send_hex_request(request: bytes, comment: str):
         print(comment)
-        print('>', len(request), request)
+        print(f'> {len(request):3d}: {hex_to_str(request)}')
         response = daq.send_request(request)
-        print('<', len(response), response)
+        print(f'< {len(response):3d}: {hex_to_str(response)}')
         return response
 
     send_asc_request('$00IM', 'Undocumented')
@@ -185,27 +276,35 @@ def main():
         gw = [192, 168, 1, 1]
         mask = [255, 255, 255, 0]
         def hex_str(x: list[int]):
-            return hexlify(bytes(x)).decode().upper()
+            return bytes(x).hex().upper()
         send_asc_request('$01IP' + hex_str(ip), 'Set IP')
         send_asc_request('$01GATE' + hex_str(gw), 'Set GW')
         send_asc_request('$01MASK' + hex_str(mask), 'Set Mask')
 
+    # def send_modbus_request(id: int, command: int, addr: int, args: bytes):
+
+
     id = 0x01
-    addr = 10064
     # Read coil status
-    data = struct.pack('>BBHH', id, 0x01, addr, 1)
+    data = struct.pack('>BBHH', id, ModbusFunction.ReadCoils, 10064, 1)
     send_hex_request(data, 'Read coil status')
 
     # Write single coil
-    data = struct.pack('>BBHH', id, 0x05, addr, 0x0001)
+    data = struct.pack('>BBHH', id, ModbusFunction.WriteSingleCoil, 10064, 0x0001)
     send_hex_request(data, 'Write single coil')
+
+    # Read input registers
+    data = struct.pack('>BBHH', id, ModbusFunction.ReadInputRegisters, 30293, 17)
+    rsp = send_hex_request(data, 'Read input registers')
+    data = struct.unpack('>3x17h', rsp)
+    print(data)
+    print('@', [x/10 for x in data])
 
     # get module config
     data = struct.pack('>BBBB', id, 0x46, 0x30, 0)
     rsp = send_hex_request(data, 'Get module config')
     config = ModuleConfig(rsp[3:])
     print(config)
-    print(f'{config.misc_options=:x}, {config.options=:x}')
 
     # ModuleConfigX
     rsp = send_asc_request('%01GETFIXADDR', 'ModuleConfigX')
@@ -219,7 +318,7 @@ def main():
     # get channel types
     data = struct.pack('>BBBB', id, 0x46, 0x41, 0)
     rsp = send_hex_request(data, 'Get channel types')
-    print(hexlify(rsp, ' '))
+    print(hex_to_str(rsp))
 
     # Read channels burnout status
     send_asc_request('$01B', 'Read channels burnout status')
