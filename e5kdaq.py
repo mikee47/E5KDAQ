@@ -118,29 +118,10 @@ class MiscOptions:
     protocol: Protocol              # Protocol 0=ASCII, 1=MODBUS
     filter_freq: FilterFreq         # 00=50Hz, 01=60Hz, 10=60Hz, 11=120Hz
 
-    FIELDS = {
-        'save_DO_power_on_value': 0,
-        'save_DO_safe_value': 1,
-        'enable_power_on_value': 2,
-        'enable_safe_value': 3,
-        'enable_burn_out_detect': 4,
-        'di_active': 5,
-        'do_active': 6,
-        'enable_dhcp': 7,
-        'enable_webserver': 0x100,
-        'enable_modbus_crc': 0x200,
-        'enable_cjc': 0x400,
-        'ascii_data_format': 0x800,
-        'modbus_data_format': 0x1000,
-        'protocol': 0x2000,
-    }
-
     def __init__(self, value: int):
         for i, fld in enumerate(self.__dataclass_fields__.values()):
-            if fld.name == 'filter_freq':
-                self.filter_freq = FilterFreq(value >> 14)
-            else:
-                setattr(self, fld.name, fld.type((value >> i) & 0x0001))
+            mask = 0x0003 if fld.name == 'filter_freq' else 0x0001
+            setattr(self, fld.name, fld.type((value >> i) & mask))
 
 
 @dataclass
