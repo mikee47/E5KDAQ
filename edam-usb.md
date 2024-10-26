@@ -102,21 +102,32 @@ Misc Options 0x0590
 < 34 b'!01C0A8010BC0A80101FFFFFF00000A00\r'
 ```
 
-READ 0x41:
+ 0: !01
+ 3: C0 A8 01 0B   IP
+11: C0 A8 01 01   GW
+19: FF FF FF 00   MASK
+27: 00 0A         DHCP
+31: 00            DHCP_flag (0), WebReadOnlyFlag (0)
+
+
+READ 0x41: Get channel types
 
 < 37
 01 46 41
 90 05 c0 a8 01 0b ff ff ff 00 c0 a8 01 01 00 00 00 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10
 
  0: 90 05                   0x0590 Same as from MISC command
- 2: c0
- 3: a8 01 0b ff ff ff 00 c0 a8 01 01
+ 2: c0 a8 01 0b             IP
+ 6: ff ff ff 00             Mask
+10: c0 a8 01 01             GW
 14: 00 00                   digital input types
 16: 00                      digital output type
 17: 10 10 10 10 10 10 10 10 analogue input types 0-7
 25: 10 10 10 10 10 10 10 10 " 8-15
 33: 10                      Presumably for CJC
 
+Number of channels depends on device type, requires lookup table.
+See decompiled `read_device_data` function.
 Information returned from `E5K_GetModuleIOChannels`.
 
 

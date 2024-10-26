@@ -9,6 +9,59 @@ PACKET_SIZE = 64
 IpAddress = bytes
 MacAddress = bytes
 
+@dataclass
+class ModelInfo:
+    num_analogue_input_channels: int = 0
+    num_analogue_output_channels: int = 0
+    num_digital_input_channels: int = 0
+    num_digital_output_channels: int = 0
+
+
+MODELINFO_5015 = ModelInfo(
+    num_analogue_input_channels = 12,
+)
+
+MODELINFO_5017 = ModelInfo(
+    num_analogue_input_channels = 16,
+    num_digital_input_channels = 2,
+    num_digital_output_channels = 1
+)
+
+MODELINFO_5018 = MODELINFO_5017
+MODELINFO_5019 = MODELINFO_5017
+
+MODELINFO_5028 = ModelInfo(
+    num_digital_input_channels = 24,
+    num_digital_output_channels = 8,
+)
+
+MODELINFO_5029 = ModelInfo(
+    num_digital_input_channels = 16,
+    num_digital_output_channels = 16,
+)
+
+MODELINFO_5039 = ModelInfo(
+    num_analogue_input_channels = 8,
+    num_digital_input_channels = 8,
+    num_digital_output_channels = 8,
+)
+
+MODELINFO_5060 = ModelInfo(
+    num_digital_input_channels = 12,
+    num_digital_output_channels = 10,
+)
+
+MODELINFO: dict[int, ModelInfo] = {
+  0x5015: MODELINFO_5015,
+  0x5017: MODELINFO_5017,
+  0x5018: MODELINFO_5018,
+  0x5019: MODELINFO_5019,
+  0x5028: MODELINFO_5028,
+  0x5029: MODELINFO_5029,
+  0x5039: MODELINFO_5039,
+  0x5060: MODELINFO_5060,
+}
+
 class ModbusFunction(IntEnum):
 	ReadCoils = 0x01                                                                                                
 	ReadDiscreteInputs = 0x02                                                                                       
@@ -93,6 +146,40 @@ class MiscOptions:
 @dataclass
 class Options:
     pass
+
+
+class ChannelType(IntEnum):
+    B10V_TYPE = 0x07        # bipolar +/-10V
+    B5V_TYPE = 0x08         # bipolar +/-5V
+    B2P5V_TYPE = 0x09       # bipolar +/-2.5V
+    B1V_TYPE = 0x0a         # bipolar +/-1V
+    B500MV_TYPE = 0x0b      # bipolar +/-500mV
+    B150MV_TYPE = 0x0c      # bipolar +/-150mV
+    U20MA_TYPE = 0x0d       # unipolar 0-20mA (250 ohms)
+    B4T20MA_TYPE = 0x0e     # bipolar 4-20mA (250 ohms)
+    TC_J_TYPE = 0x0F        # T/C J type
+    TC_K_TYPE = 0x10        # T/C K type
+    TC_T_TYPE = 0x11        # T/C T type
+    TC_E_TYPE = 0x12        # T/C E type
+    TC_R_TYPE = 0x12        # T/C R type
+    TC_S_TYPE = 0x14        # T/C S type
+    TC_B_TYPE = 0x15        # T/C B type
+    IECPT100_TYPE1 = 0x20   # IEC Pt100  -50C ~ 150C
+    IECPT100_TYPE2 = 0x21   # IEC Pt100    0C ~ 100C
+    IECPT100_TYPE3 = 0x22   # IEC Pt100    0C ~ 200C
+    IECPT100_TYPE4 = 0x23   # IEC Pt100    0C ~ 400C
+    IECPT100_TYPE5 = 0x24   # IEC Pt100 -200C ~ 200C
+    JISPT100_TYPE1 = 0x25   # JIS Pt100  -50C ~ 150C
+    JISPT100_TYPE2 = 0x26   # JIS Pt100    0C ~ 100C
+    JISPT100_TYPE3 = 0x27   # JIS Pt100    0C ~ 200C
+    JISPT100_TYPE4 = 0x28   # JIS Pt100    0C ~ 400C
+    JISPT100_TYPE5 = 0x29   # JIS Pt100 -200C ~ 200C
+    PT1000_TYPE = 0x2a      # Pt1000     -40C ~ 160C
+    BALCO500_TYPE1 = 0x2b   # BALCO500   -30C ~ 120C
+    Ni604_TYPE1 = 0x2c      # Ni         -80C ~ 100C
+    Ni604_TYPE2 = 0x2d      # Ni           0C ~ 100C
+
+
 
 def hex_to_str(data: bytes) -> str:
     return data.hex(' ')
@@ -305,6 +392,7 @@ def main():
     rsp = send_hex_request(data, 'Get module config')
     config = ModuleConfig(rsp[3:])
     print(config)
+    print(f'OPTIONS: {config.options:x}')
 
     # ModuleConfigX
     rsp = send_asc_request('%01GETFIXADDR', 'ModuleConfigX')
