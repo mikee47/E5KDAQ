@@ -1,558 +1,313 @@
-'''
-Copyright (c) 2009-2012  Inlog Micro system   All rights reserved.
-
-File Name   : E5KDAQ.H
-Purpose     : EDAM 5000 Moudles Definition
-
-Revision    : 1.40  (2009/02/11)
-
-Revision    : 4.70 (2013/09/06)
-              (1). Add E5K_EthernetSearchDevice function
-              (2). Add E5K_BuildHtmFileSystemX function
-              (3). support EDAM5039
-
-Revision    : 5.00 (2014/04/16)
-              this DLL require to use iusblib.dll,libusb0.dll, and libusb0.sys
-        compiled by VS-2010
-'''
-
+import usb.core
+import struct
 from enum import IntEnum
+from dataclasses import dataclass
+from collections.abc import Sequence
 
-# -- Type definations --------------
-# typedef     unsigned short     E5K_STATUS;
-# typedef     unsigned short     MODULE_ID;
-# typedef     long             LONG;  //SDWORD;
-# typedef     short            SHORT; //SWORD;
-# typedef     unsigned long    ULONG; //DWORD;
-# typedef     char             CHAR;  //SBYTE;
-# typedef     unsigned int     UINT;  //UINT;
-# typedef     int              INT;   //INT;
-# typedef     unsigned char    UCHAR; //SBYTE;
-# typedef     unsigned short   USHORT;
+PACKET_SIZE = 64
 
+IpAddress = bytes
+MacAddress = bytes
 
-#define     LED_HOST                1
-#define     LED_MODULE              0
-
-# --Event type ---
-class InterruptType(IntEnum):
-    DI_INT_TYPE = 0 # DI Event
-    AD_INT_TYPE = 1 # AI Event
-
-# --Event status ---
-class EventStatus(IntEnum):
-    DI_LOW_HIGH_INT_STATE = 0    # DI low to high Event
-    DI_HIGH_LOW_INT_STATE = 1    # DI high to low Event
-    AD_HIGH_ALARM_INT_STATE =    # AI high alarm Event
-    AD_LOW_ALARM_INT_STATE = 1   # AI low alarm Event
-
-# -- Digital input mode decleration --
-class DigitalInputMode(IntEnum):
-    DI_MODE = 0                  # direct input mode
-    COUNTER_MODE = 1             # counter mode
-    LOW_HIGH_LATCH_MODE = 2      # low to high LATCH mode
-    HIGH_LOW_LATCH_MODE = 3      # hjgh to low LATCH mode
-    FREQUENCY_MODE = 4           # frequency mode
-
-# -- TCP/IP decleration --
-#define     TCP_MODBUS_PORT         502       //Modbus TCP/IP port (TCP)
-#define     UDP_ASC_PORT            1025      //ASC command port/MODBUS RTU (UDP)
-#define     UDP_BROADCAST_PORT      5048      //broadcast port     (UDP)
-#define     BROADCAST_IP            "255.255.255.255"
-#define     UDP_ALARM_PORT          5168      //udp alarm port
-#define     UDP_STREAM_PORT         5148      //udp Stream port
-
-# -- RS232/485 Rx Timeout --
-#define     COM_DEFAULT_TIMEOUT     300
-
-# -- EDAM5015 AD channel types -----------
-#define     IECPT100_TYPE1          0x20    // type 0x20:IEC Pt100  -50C ~ 150C
-#define     IECPT100_TYPE2          0x21    // type 0x21:IEC Pt100    0C ~ 100C
-#define     IECPT100_TYPE3          0x22    // type 0x22:IEC Pt100    0C ~ 200C
-#define     IECPT100_TYPE4          0x23    // type 0x23:IEC Pt100    0C ~ 400C
-#define     IECPT100_TYPE5          0x24    // type 0x24:IEC Pt100 -200C ~ 200C
-#define     JISPT100_TYPE1          0x25    // type 0x25:JIS Pt100  -50C ~ 150C
-#define     JISPT100_TYPE2          0x26    // type 0x26:JIS Pt100    0C ~ 100C
-#define     JISPT100_TYPE3          0x27    // type 0x27:JIS Pt100    0C ~ 200C
-#define     JISPT100_TYPE4          0x28    // type 0x28:JIS Pt100    0C ~ 400C
-#define     JISPT100_TYPE5          0x29    // type 0x29:JIS Pt100  -200C ~ 200C
-#define     PT1000_TYPE             0x2a    // type 0x2A:Pt1000     -40C ~ 160C
-#define     BALCO500_TYPE1          0x2b    // type 0x2B:BALCO500   -30C ~ 120C
-#define     Ni604_TYPE1             0x2c    // type 0x2C:Ni         -80C ~ 100C
-#define     Ni604_TYPE2             0x2d    // type 0x2D:Ni           0C ~ 100C
-
-#define     E5015_TYPE_START        IECPT100_TYPE1
-#define     E5015_TYPE_END          Ni604_TYPE2
-
-# -- EDAM5017 AD channel types -----------
-#define     B10V_TYPE               0x07  // type 0X09 bipolar +/-10V
-#define     B5V_TYPE                0x08  // type 0X0A bipolar +/-5V
-#define     B2P5V_TYPE              0x09  // type 0X09 bipolar +/-2.5V
-#define     B1V_TYPE                0x0a  // type 0X0A bipolar +/-1V
-#define     B500MV_TYPE             0x0b  // type 0X0B bipolar +/-500mV
-#define     B150MV_TYPE             0x0c  // type 0X0C bipolar +/-150mV
-#define     U20MA_TYPE              0x0d  // type 0X0D unipolar 0-20mA (250 ohms)
-#define     B4T20MA_TYPE            0x0e  // type 0X0E bipolar 4-20mA (250 ohms)
-
-#define     E5017_TYPE_START        B10V_TYPE
-#define     E5017_TYPE_END          B4T20MA_TYPE
-
-# -- EDAM5019/5039 AD channel types -----------
-#define     B2P5V_TYPE              0x09  // type 0X09 bipolar +/-2.5V
-#define     B1V_TYPE                0x0a  // type 0X0A bipolar +/-1V
-#define     B500MV_TYPE             0x0b  // type 0X0B bipolar +/-500mV
-#define     B150MV_TYPE             0x0c  // type 0X0C bipolar +/-150mV
-#define     U20MA_TYPE              0x0d  // type 0X0D unipolar 0-20mA (250 ohms)
-#define     B4T20MA_TYPE            0x0e  // type 0X0E bipolar 4-20mA (250 ohms)
-#define     TC_J_TYPE               0x0F  // T/C J type
-#define     TC_K_TYPE               0x10  // T/C K type
-#define     TC_T_TYPE               0x11  // T/C T type
-#define     TC_E_TYPE               0x12  // T/C E type
-#define     TC_R_TYPE               0x12  // T/C R type
-#define     TC_S_TYPE               0x14  // T/C S type
-#define     TC_B_TYPE               0x15  // T/C B type
-
-#define     E5019_TYPE_START        B2P5V_TYPE
-#define     E5019_TYPE_END          TC_B_TYPE
-
-#define     E5039_TYPE_START        B2P5V_TYPE
-#define     E5039_TYPE_END          TC_B_TYPE
-
-#define     ZERO_TYPE               1
-#define     SPAN_TYPE               2
-
-#define     ALARM_EVENT_TYPE        0
-#define     STREAM_EVENT_TYPE       1
-
-#define     INT_QUE_DEEP            32  //do not change
-#define     INT_QUE_SIZE            1024
-
-// -- Error Code table -----------
-class ErrorCode(IntEnum):
-    STATUS_NO_ERROR                     = 0x00 # No Error
-    STATUS_NOT_SUPPORT_MODULE           = 0x01 # Device Not supported
-    STATUS_DEVICE_NOT_FOUND             = 0x02 # Device is not existed
-    STATUS_DRIVER_NOT_OPEN              = 0x03 # Device not activated
-    STATUS_DRIVER_OPEN_FAIL             = 0x04 # Device driver open fail
-    STATUS_DEVICE_TIMEOUT               = 0x05 # Device time out
-    STATUS_DEVICE_REPSONSE_ERROR        = 0x06 # Device Response Error
-    STATUS_INVALID_DRIVER_VERSION       = 0x07 # Invalid Driver version
-    STATUS_INVALID_DEVICE_ID            = 0x08 # Invalid ID Number
-    STATUS_DEVICE_ID_OVERLAP            = 0x09 # Device ID overlaped
-    STATUS_INVALID_INTERFACE_TYPE       = 0x10 # Invalid Interace Type
-    STATUS_INVALID_PASSWORD             = 0x11 # Invalid Pass Word or password not be verified
-    STATUS_INVALID_ASCII_COMMAND        = 0x12 # Invalid ASCII Command
-    STATUS_EVENT_ALREADY_ENABLED        = 0x13 # Event Already enabled
-    STATUS_NO_EVENT_DATA                = 0x14 # No Event Data
-    STATUS_OPTION_OUT_OF_RANGE          = 0x15 # Arguments Out Of Range
-    STATUS_INVALID_PORT_NUMBER          = 0x16 # Invalid Port Number
-    STATUS_INVALID_DO_DATA              = 0x17 # Invalid DO Data
-    STATUS_INVALID_DIO_CHANNEL          = 0x18 # Invalid Digital Channel Number
-    STATUS_INVALID_TIMER_VALUE          = 0x19 # Invalid Timer Value
-    STATUS_INVALID_TIMER_MODE           = 0x20 # Invalid Timer Mode
-    STATUS_INVALID_COUNTER_NO           = 0x21 # Invalid Counter Number
-    STATUS_INVALID_COUNTER_VALUE        = 0x22 # Invalid Counter Value
-    STATUS_INVALID_COUNTER_MODE         = 0x23 # Invalid Counter Mode
-    STATUS_INVALID_AD_FILTER            = 0x24 # Invalid A/D Filter Type
-    STATUS_INVALID_AD_MODE              = 0x25 # Invalid A/D Mode
-    STATUS_INVALID_AD_CHANNEL           = 0x26 # Invalid A/D channel number
-    STATUS_INVALID_AD_GAIN              = 0x27 # Invalid A/D Gain
-    STATUS_INVALID_AD_RANGE             = 0x28 # Invalid A/D Range
-    STATUS_INVALID_AD_COUNT             = 0x29 # Invalid A/D count Value
-    STATUS_INVALID_AD_SCAN_RATE         = 0x30 # Invalid A/D Scan Rate
-    STATUS_FIFO_HALF_NOTREADY           = 0x31 # A/D FIFO Half Not Ready
-    STATUS_INVALID_DA_CHANNEL           = 0x32 # Invalid D/A channel number
-    STATUS_INVALID_DA_VALUE             = 0x33 # Invalid D/A Value
-    STATUS_INVALID_DEBOUNCE_MODE        = 0x34 # Invalid Debounce Mode
-    STATUS_INVALID_DEBOUNCE_TIME        = 0x35 # Invalid Debounce Time
-    STATUS_INVALID_MODBUS_FUNCTION      = 0x36 # Invalid MODBUS Function
-    STATUS_INVALID_MODBUS_START_ADDRESS = 0x37 # Invalid MODBUS Start Address
-    STATUS_MODBUS_OUT_OF_RANGE          = 0x38 # MODBUS Address Out Of Range or command length error
-    STATUS_MODBUS_DISCRETE_QTY_OVER32   = 0x39 # MODBUS Range over 32 Channel
-    STATUS_WINSCK_NOT_OPEN              = 0x40 # WINSCK Not Opened
-    STATUS_WINSCK_STARTUP_FAILURE       = 0x41 # Windows winsock2 start up error
-    STATUS_INVALID_IP                   = 0x42 # Invalid IP address or IP already open
-    STATUS_TCP_SOCKET_FAILURE           = 0x43 # Can Not Create TCP Socket
-    STATUS_UDP_SOCKET_FAILURE           = 0x44 # Can Not Create UDP Socket
-    STATUS_SET_IP_TIMEOUT_FAILURE       = 0x45 # Can Not Set TCP/IP Timeout
-    STATUS_SEND_TO_IP_FAILURE           = 0x46 # Can Not Send Package To Destination
-    STATUS_RECEIVE_FROM_IP_FAILURE      = 0x47 # No Package Received Until Timeout
-    STATUS_READ_STREAM_DATA_FAILURE     = 0x48 # Unable To Read Stream Data
-    STATUS_IP_NOT_CONNECTED             = 0x49 # No Connection To Remote IP Address
-    STATUS_ALARM_INFO_EMPTY             = 0x50 # Alarm Event Buffer Empty
-    STATUS_STREAM_INFO_EMPTY            = 0x51 # Stream Event Buffer Empty
-    STATUS_MEMALLOC_ERROR               = 0x52 # Unable To Allocate Memory
-    STATUS_PING_TIMEOUT                 = 0x53 # Can Not Ping Remote IP Address
-    STATUS_ASCII_CHECKSUM_ERROR         = 0x54 # ASCII Check Sum error
-    STATUS_MODBUS_CRC_ERROR             = 0x55 # MODBUS crcCRC error
-    STATUS_NOT_INSUBNET                 = 0x56 # IP not in the subnet
-    STATUS_COMM_ALREADY_OPEN            = 0x57 # COMM port already open
-    STATUS_NO_ENOUGH_BUFFERSIZE         = 0x58 # no enough buffer size to receive data
-    STATUS_INVALID_PARAMETERS           = 0x59 # invalid parameters
-    STATUS_DATA_OVER_1024_BYTE          = 0x60 # USB data over 1024 bytes
-    STATUS_INVALID_HOST_IP              = 0x61 # Invalid host IP
-    STATUS_INVALID_STREAM_IP            = 0x62 # Invalid stream IP
-    STATUS_INVALID_ALARM_IP             = 0x63 # Invalid alarm IP
-    STATUS_OPEN_PLF_FAIL                = 0x64 # Can not open web page list file
-    STATUS_OPEN_HTM_FAIL                = 0x65 # Can not open web page file
-    STATUS_OPEN_OUT_FAIL                = 0x66 # Can output Web page obj code file
-    STATUS_END                          = 0x67 # Error Code Out of Range
-
-'''
-
-typedef struct ALARM_EVENT_INFO
-{
-    USHORT    szID;                 //the ID address which cause the alarm Event
-    UCHAR     szIP[4];              //Target IP
-    USHORT    wIntType;             //0= DI Event,1= AD Event
-    USHORT    wChno;                //Event channel number
-    USHORT    wStatus;              //=0 for low to high Event for DI or high alarm for AI channel
-                                    //=1 for high to low Event for DI or low alarm for AI channel
-    double    fAddata;              //AD data if AD alarm occured
-} ALARM_EVENT_INFO;
-
-typedef struct STREAM_EVENT_INFO
-{
-    USHORT    wszID;                //the ID address which cause the alarm change
-    UCHAR     szIP[4];
-    ULONG     dwDi;
-    ULONG     dwDiLatch;
-    ULONG     dwDiCount[32];
-    ULONG     dwDo;
-    double    fAiNorValue[17];      //normal AD values(channel #0~15 and average channel)
-    double    fAiMaxValue[16];
-    double    fAiMinValue[16];
-    USHORT    wAiHighAlarmstatus;
-    USHORT    wAiLowAlarmstatus;
-    USHORT    wAiBurnOut ;          //EDAM5019/5015/5039 only
-    double    fCJCTemperature;      //EDAM 5019/5039 only unit of 0.1C//
-    double    fAoValue[16];
-} STREAM_EVENT_INFO;
-
-typedef void (WINAPI *ALARM_EVENT_HANDLER)(USHORT Id) ;
+@dataclass
+class ModelInfo:
+    num_analogue_input_channels: int = 0
+    num_analogue_output_channels: int = 0
+    num_digital_input_channels: int = 0
+    num_digital_output_channels: int = 0
 
 
-typedef struct E5K_DEVICE_ID_INFO
-{
-    USHORT     dev_id;
-    USHORT     dev_name;
-    UCHAR      dev_ip[20];
-    CHAR       open_name[20];
+MODELINFO_5015 = ModelInfo(
+    num_analogue_input_channels = 12,
+)
 
-} E5K_DEVICE_ID_INFO ;
+MODELINFO_5017 = ModelInfo(
+    num_analogue_input_channels = 16,
+    num_digital_input_channels = 2,
+    num_digital_output_channels = 1
+)
 
-typedef struct MODULE_CONFIG {
+MODELINFO_5018 = MODELINFO_5017
+MODELINFO_5019 = MODELINFO_5017
 
-    CHAR       bmac[6];                     //mac address  where SYBTE =char
-    CHAR       bmask[4];                    //mask address
-    UCHAR      bip[4];                      //IP address
-    UCHAR      bgate[4];                    //gateway
-    UCHAR      bmodule_id;                  //module id number
-    UCHAR      bmodule_name[8];             //user's define module name =8 CHARs
-    UCHAR      bmodule_desc[32];            //module descriptions =32
-    UCHAR      sevent_sip[4][4];            //event trigger IP addresses
-    UCHAR      bevent_trigger[4];           //enable/disable event trigger
-    UCHAR      sstream_sip[4][4];           //acvtive-send stream IP addresses
-    UCHAR      bstream_active[4];           //enable/disable acvtive-send stream ,0=disbale/1=enable
-    ULONG      dwstream_time_interval;      //time interval for acvtive-send
-    UCHAR      bbaudrate;                   //3=1200,4=2400,5=4800,6=9600,7=19200,8=38400,9=57600,10=115200
-    USHORT     wMiscOptions;                //(bit 0)save current DO status as power on value and wirte to eeprom//
-                                            //(bit 1)save current DO status as safe value and wirte to eeprom//
-                                            //(bit 2)enable/disable power on value function//
-                                            //(bit 3)enable/disable safe value function//
-                                            //(bit 4)enable/disable burn out detection //
-                                            //(bit 5)DI active state 0=low active,1=high active
-                                            //(bit 6)DO active state 0=low active,1=high active
-                                            //(bit 7)DHCP 0=disnable,1=enable
-                                            //(bit 8)WebServer 0=disnable,1=enable
-                                            //(bit 9)Modbus CRC 0=disable,1=enable
-                                            //(bit10)disbale/enable CJC, 0=disable/1 =enable(for EDAM5019/5039 only)
-                                            //(bit11)ASCII data format 0=enginerring, 1=2's
-                                            //(bit12)MODBUS data format 0=enginerring,1=2's
-                                            //(bit13)Ptotocol 0=ASCI protocol,1=MODBUS protocol
-                                            //(bit14~bir15) 00=50Hz,01=60Hz,10=60Hz,11=120Hz
-   USHORT     wOptions;
-   CHAR       sversion[38];
-} MODULE_CONFIG  ;
+MODELINFO_5028 = ModelInfo(
+    num_digital_input_channels = 24,
+    num_digital_output_channels = 8,
+)
 
-typedef struct MODULE_CONFIGX {
+MODELINFO_5029 = ModelInfo(
+    num_digital_input_channels = 16,
+    num_digital_output_channels = 16,
+)
 
-    UCHAR     bmac[6];                      //mac address  where SYBTE =char
-    UCHAR     bmask[4];                     //mask address
-    UCHAR     bip[4];                       //IP address
-    UCHAR     bgate[4];                     //gateway
-    UCHAR     bmodule_id;                   //module id number
-    UCHAR     bmodule_name[8];              //user's define module name =8 SBYTEs
-    UCHAR     bmodule_desc[32];             //module descriptions =32
-    UCHAR     sevent_sip[4][4];             //event trigger IP addresses
-    UCHAR     bevent_trigger[4];            //enable/disable event trigger
-    UCHAR     sstream_sip[4][4];            //acvtive-send stream IP addresses
-    UCHAR     bstream_active[4];            //enable/disable acvtive-send stream ,0=disbale/1=enable
-    ULONG     dwstream_time_interval;       //time interval for acvtive-send
-    UCHAR     bbaudrate;                    //3=1200,4=2400,5=4800,6=9600,7=19200,8=38400,9=57600,10=115200
-    USHORT    wMiscOptions;                 //(bit 0)save current DO status as power on value and wirte to eeprom//
-                                            //(bit 1)save current DO status as safe value and wirte to eeprom//
-                                            //(bit 2)enable/disable power on value function//
-                                            //(bit 3)enable/disable safe value function//
-                                            //(bit 4)enable/disable burn out detection //
-                                            //(bit 5)DI active state 0=low active,1=high active
-                                            //(bit 6)DO active state 0=low active,1=high active
-                                            //(bit 7)DHCP 0=disnable,1=enable
-                                            //(bit 8)WebServer 0=disnable,1=enable
-                                            //(bit 9)Modbus CRC 0=disable,1=enable
-                                            //(bit10)disbale/enable CJC, 0=disable/1 =enable(for EDAM5019/5039 only)
-                                            //(bit11)ASCII data format 0=enginerring, 1=2's
-                                            //(bit12)MODBUS data format 0=enginerring,1=2's
-                                            //(bit13)Ptotocol 0=ASCI protocol,1=MODBUS protocol
-                                            //(bit14~bir15) 00=50Hz,01=60Hz,10=60Hz,11=120Hz
-   USHORT     Options;
-   UCHAR      sversion[38];
-   # ----------------------------------------
-   UCHAR      bFixIP[4];
-   UCHAR      bFixGate[4] ;
-   UCHAR      bFixMask[4];
-   USHORT     wDHCP_timeout;
-   USHORT     wDHCP_flag  ;
-   USHORT     wWebReadOnly_flag     ;       //Web page read only flag, 0=read/write, 1=read only
-   # ------------------------------------------
-   UCHAR      ReserveByte[32] ;
-} MODULE_CONFIGX  ;
+MODELINFO_5039 = ModelInfo(
+    num_analogue_input_channels = 8,
+    num_digital_input_channels = 8,
+    num_digital_output_channels = 8,
+)
+
+MODELINFO_5060 = ModelInfo(
+    num_digital_input_channels = 12,
+    num_digital_output_channels = 10,
+)
+
+MODELINFO: dict[int, ModelInfo] = {
+  0x5015: MODELINFO_5015,
+  0x5017: MODELINFO_5017,
+  0x5018: MODELINFO_5018,
+  0x5019: MODELINFO_5019,
+  0x5028: MODELINFO_5028,
+  0x5029: MODELINFO_5029,
+  0x5039: MODELINFO_5039,
+  0x5060: MODELINFO_5060,
+}
+
+class ModbusFunction(IntEnum):
+	ReadCoils = 0x01                                                                                                
+	ReadDiscreteInputs = 0x02                                                                                       
+	ReadHoldingRegisters = 0x03                                                                                     
+	ReadInputRegisters = 0x04                                                                                       
+	WriteSingleCoil = 0x05                                                                                          
+	WriteSingleRegister = 0x06                                                                                      
+	ReadExceptionStatus = 0x07                                                                                      
+	GetComEventCounter = 0x0b                                                                                       
+	GetComEventLog = 0x0c                                                                                           
+	WriteMultipleCoils = 0x0f                                                                                       
+	WriteMultipleRegisters = 0x10                                                                                   
+	ReportServerId = 0x11                                                                                           
+	MaskWriteRegister = 0x16                                                                                        
+	ReadWriteMultipleRegisters = 0x17
 
 
-typedef struct MODULE_DATA
-{
-    ULONG     Din;
-    ULONG     Dout;
-    ULONG     DiLatch;
-    ULONG     DiCounter[32];
-    double    AiNormalValue[16];
-    double    AiMaxValue[16];
-    double    AiMinValue[16];
-    USHORT    AiHighAlarmstatus;
-    USHORT    AiLowAlarmstatus;
-    USHORT    AiBurnOut ;                     //EDAM 5019/5015/5039 only
-    double    CJCTemperature  ;               //EDAM 5019/5039 only//
-    double    AoValue[16];
+class State(IntEnum):
+    active_low = 0
+    active_high = 1
 
-} MODULE_DATA;
 
-typedef struct MODULE_IOCHANNELS
-{
-    UCHAR     cdevname[10];                   //User's define Module name =8 SBYTEs
-    UCHAR     cIPaddress[16];
-    USHORT    wAIChns;
-    USHORT    wAOChns;
-    USHORT    wDIChns;
-    USHORT    wDOChns;
+class DataFormat(IntEnum):
+    engineering = 0
+    binary = 1 # 2's complement
 
-}MODULE_IOCHANNELS;
 
-# --configuration of DI channel --
-typedef struct AI_CHANNEL_CONFIG
-{
-    USHORT    wType;
-    USHORT    wActive;
-    USHORT    wInAverage;
-    USHORT    wHiAlarmMode;
-    USHORT    wLoAlarmMode;
-    USHORT    wHiAlarmDo;
-    USHORT    wLoAlarmDo;
-    double    fHighLimit;
-    double    fLowLimit;
-} AI_CHANNEL_CONFIG;
+class Protocol(IntEnum):
+    ascii = 0
+    modbus = 1
 
-typedef struct DI_CHANNEL_CONFIG
-{
-    USHORT    wType;                          //DI mode
-    USHORT    wIntstatus;                     //latch Event
-    USHORT    wdi_debounce_timeinterval;      //debounce time interval
 
-} DI_CHANNEL_CONFIG;
+class FilterFreq(IntEnum):
+    freq_50hz = 0
+    freq_60hz = 1
+    freq_60hz2 = 2
+    freq_120hz = 3
 
-'''
+@dataclass
+class MiscOptions:
+    save_DO_power_on_value: bool    # Save current DO status as power on value and write to eeprom
+    save_DO_safe_value: bool        # Save current DO status as safe value and write to eeprom
+    enable_power_on_value: bool     # Enable/disable power on value function//
+    enable_safe_value: bool         # Enable/disable safe value function//
+    enable_burn_out_detect: bool    # Enable/disable burn out detection //
+    di_active: State                # DI active state 0=low active, 1=high active
+    do_active: State                # DO active state 0=low active, 1=high active
+    enable_dhcp: bool               # DHCP 0=disable, 1=enable
+    enable_webserver: bool          # WebServer 0=disable, 1=enable
+    enable_modbus_crc: bool         # Modbus CRC 0=disable, 1=enable
+    enable_cjc: bool                # Enable/disable CJC, 0=disable, 1=enable (for EDAM5019/5039 only)
+    ascii_data_format: DataFormat   # ASCII data format 0=enginerring, 1=2's
+    modbus_data_format: DataFormat  # MODBUS data format 0=enginerring, 1=2's
+    protocol: Protocol              # Protocol 0=ASCII, 1=MODBUS
+    filter_freq: FilterFreq         # 00=50Hz, 01=60Hz, 10=60Hz, 11=120Hz
 
- INT E5K_GetRunTimeOS(void );
+    FIELDS = {
+        'save_DO_power_on_value': 0,
+        'save_DO_safe_value': 1,
+        'enable_power_on_value': 2,
+        'enable_safe_value': 3,
+        'enable_burn_out_detect': 4,
+        'di_active': 5,
+        'do_active': 6,
+        'enable_dhcp': 7,
+        'enable_webserver': 0x100,
+        'enable_modbus_crc': 0x200,
+        'enable_cjc': 0x400,
+        'ascii_data_format': 0x800,
+        'modbus_data_format': 0x1000,
+        'protocol': 0x2000,
+    }
 
- # --Open/Close Device functions ---
- SHORT       E5K_OpenModuleUSB          (MODULE_ID Devid);
- SHORT       E5K_OpenModuleIP           (CHAR Ip[],ULONG ConnectTimeout,ULONG TxTimeout,ULONG RxTimeout);
- SHORT       E5K_OpenModuleCOM          (MODULE_ID Devid,USHORT COMport,ULONG RxTotalTimeOut,ULONG RxTimeoutInterval,ULONG Baudrate,CHAR ChksumCRC);
- E5K_STATUS  E5K_CloseModules           (void);
- E5K_STATUS  E5K_CloseModuleID          (MODULE_ID id);
+    def __init__(self, value: int):
+        for i, fld in enumerate(self.__dataclass_fields__.values()):
+            if fld.name == 'filter_freq':
+                self.filter_freq = FilterFreq(value >> 14)
+            else:
+                setattr(self, fld.name, fld.type((value >> i) & 0x0001))
 
- E5K_STATUS  E5K_EthernetSearchDevice(E5K_DEVICE_ID_INFO *pd,CHAR destIP[]);
- USHORT      E5K_GetHostIPConfig        (CHAR HostIP[],CHAR HostMask[],CHAR HostDesc[]) ;
- E5K_STATUS  E5K_SetHostNICAddress      (CHAR *NicIP);
- E5K_STATUS  E5K_GetLocalIP             (CHAR *ip0,CHAR *ip1,CHAR *ip2,CHAR *ip3);
- USHORT      E5K_GetLocalIPEx           (CHAR ip[]);
- USHORT      E5K_SearchModules          (E5K_DEVICE_ID_INFO *pd,USHORT interface_type );
- E5K_STATUS  E5K_IsHostIPExisted        (CHAR *bHostIP);
- E5K_STATUS  E5K_SetCurrentInterface    (MODULE_ID id,USHORT interface_type);
- E5K_STATUS  E5K_ReadCurrentInterface   (MODULE_ID id,USHORT *interface_type);
- E5K_STATUS  E5K_ReadModuleConfig       (MODULE_ID id,MODULE_CONFIG *mp);
- E5K_STATUS  E5K_ReadModuleConfigX      (MODULE_ID id,MODULE_CONFIGX *mp);
- E5K_STATUS  E5K_SetModuleConfig        (MODULE_ID id,MODULE_CONFIG  *mp);
- E5K_STATUS  E5K_SetModuleConfigX       (MODULE_ID id,MODULE_CONFIGX *mp);
- E5K_STATUS  E5K_VerifyPassWord         (MODULE_ID id ,CHAR PassWord[], USHORT length);
- E5K_STATUS  E5K_ChangePassWord         (MODULE_ID id,CHAR oldPassWord[], USHORT oldlength,CHAR newPassWord[], USHORT newlength);
- E5K_STATUS  E5K_GetLastErrorCode       (void);
- E5K_STATUS  E5K_GetErrorDescription    (USHORT werr,CHAR ErrStr[]);
 
- INT         E5K_StartAlarmEventIP      (CHAR *IPADDRESS) ;
- E5K_STATUS  E5K_StopAlarmEventIP       (CHAR *IPADDRESS);
- INT         E5K_StartAlarmEventUSB     (MODULE_ID id) ;
- E5K_STATUS  E5K_StopAlarmEventUSB      (MODULE_ID id);
- E5K_STATUS  E5K_ReadAlarmEventData     (ALARM_EVENT_INFO AlarmIntInfo[]);
- E5K_STATUS  E5K_ReadAlarmEventDataUSBEx(ALARM_EVENT_INFO EventIntInfo[],USHORT id);
- E5K_STATUS  E5K_ReadAlarmEventDataIPEx (ALARM_EVENT_INFO EventIntInfo[],CHAR TargetIP[]);
+@dataclass
+class Options:
+    pass
 
- LONG        E5K_StartStreamEvent       (CHAR *IPADDRESS) ;
- E5K_STATUS  E5K_StopStreamEvent        (CHAR *IPADDRESS);
- E5K_STATUS  E5K_ReadStreamEventData    (STREAM_EVENT_INFO StreamIntInfo[]);
- E5K_STATUS  E5K_ReadStreamEventDataEx  (STREAM_EVENT_INFO StreamIntInfo[],CHAR TargetIP[]);
 
- E5K_STATUS  E5K_GetSYSVersion          (USHORT *Major,USHORT *Minor);
- E5K_STATUS  E5K_GetDLLVersion          (USHORT *Major,USHORT *Minor);
- E5K_STATUS  E5K_ReadAllDataFromModule  (MODULE_ID id ,MODULE_DATA *mp);
- E5K_STATUS  E5K_GetModuleIOChannels    (MODULE_ID id,MODULE_IOCHANNELS *mp);
+class ChannelType(IntEnum):
+    B10V_TYPE = 0x07        # bipolar +/-10V
+    B5V_TYPE = 0x08         # bipolar +/-5V
+    B2P5V_TYPE = 0x09       # bipolar +/-2.5V
+    B1V_TYPE = 0x0a         # bipolar +/-1V
+    B500MV_TYPE = 0x0b      # bipolar +/-500mV
+    B150MV_TYPE = 0x0c      # bipolar +/-150mV
+    U20MA_TYPE = 0x0d       # unipolar 0-20mA (250 ohms)
+    B4T20MA_TYPE = 0x0e     # bipolar 4-20mA (250 ohms)
+    TC_J_TYPE = 0x0F        # T/C J type
+    TC_K_TYPE = 0x10        # T/C K type
+    TC_T_TYPE = 0x11        # T/C T type
+    TC_E_TYPE = 0x12        # T/C E type
+    TC_R_TYPE = 0x12        # T/C R type
+    TC_S_TYPE = 0x14        # T/C S type
+    TC_B_TYPE = 0x15        # T/C B type
+    IECPT100_TYPE1 = 0x20   # IEC Pt100  -50C ~ 150C
+    IECPT100_TYPE2 = 0x21   # IEC Pt100    0C ~ 100C
+    IECPT100_TYPE3 = 0x22   # IEC Pt100    0C ~ 200C
+    IECPT100_TYPE4 = 0x23   # IEC Pt100    0C ~ 400C
+    IECPT100_TYPE5 = 0x24   # IEC Pt100 -200C ~ 200C
+    JISPT100_TYPE1 = 0x25   # JIS Pt100  -50C ~ 150C
+    JISPT100_TYPE2 = 0x26   # JIS Pt100    0C ~ 100C
+    JISPT100_TYPE3 = 0x27   # JIS Pt100    0C ~ 200C
+    JISPT100_TYPE4 = 0x28   # JIS Pt100    0C ~ 400C
+    JISPT100_TYPE5 = 0x29   # JIS Pt100 -200C ~ 200C
+    PT1000_TYPE = 0x2a      # Pt1000     -40C ~ 160C
+    BALCO500_TYPE1 = 0x2b   # BALCO500   -30C ~ 120C
+    Ni604_TYPE1 = 0x2c      # Ni         -80C ~ 100C
+    Ni604_TYPE2 = 0x2d      # Ni           0C ~ 100C
 
- # --ASCII command functions--
- E5K_STATUS  E5K_SendASCRequestAndWaitResponse( MODULE_ID id, CHAR asccmd[], CHAR response[],USHORT rxbuffersize);
- E5K_STATUS  E5K_RecvASCII              (MODULE_ID id ,CHAR Rxbuffer[],USHORT BufferSize);
- E5K_STATUS  E5K_SendASCII              (MODULE_ID id ,UCHAR asccmd[]);
 
- # --MODBUS functions--
- E5K_STATUS  E5K_WriteModBusDiscrete    (MODULE_ID id,USHORT startaddr,USHORT counts, CHAR Discrete[]);
- E5K_STATUS  E5K_WriteModBusRegister    (MODULE_ID id,USHORT startaddr,USHORT counts, SHORT regs[]);
- E5K_STATUS  E5K_ReadModBusRegister     (MODULE_ID id,USHORT startaddr,USHORT counts, SHORT regs[]);
- E5K_STATUS  E5K_ReadModBusDiscrete     (MODULE_ID id,USHORT startaddr,USHORT counts, CHAR Discrete[]);
- E5K_STATUS  E5K_SendHEXRequestAndWaitResponse( MODULE_ID id , CHAR cTxData[],USHORT wTxlen, CHAR cRxdata[],USHORT *wRxlen,USHORT buffersize);
- E5K_STATUS  E5K_CalculateCRC16         (UCHAR bData[], USHORT wLen, USHORT *wCRC);
- E5K_STATUS  E5K_SendHEX                (MODULE_ID id , CHAR cTxData[],USHORT wTxlen);
- E5K_STATUS  E5K_RecvHEX                (MODULE_ID id ,CHAR Rxbuffer[],USHORT *wRxlen,USHORT BufferSize);
+def int_to_temp(value: int, scale: float = 1370.0):
+    '''Obtain temperature values'''
+    if isinstance(value, Sequence):
+        return [int_to_temp(x) for x in value]
+    return round(value * scale / 32767, 1)
 
- # --DI functions--
- E5K_STATUS  E5K_SetDIChannelConfig     (MODULE_ID id ,USHORT chn,DI_CHANNEL_CONFIG *Mode);
- E5K_STATUS  E5K_ReadDIChannelConfig    (MODULE_ID id ,USHORT chn,DI_CHANNEL_CONFIG *Mode);
- E5K_STATUS  E5K_ReadDIStatus           (MODULE_ID id ,ULONG *Didata);
- E5K_STATUS  E5K_ReadDILatch            (MODULE_ID id ,ULONG *Dilatch);
- E5K_STATUS  E5K_ClearAllDILatch        (MODULE_ID id);
- E5K_STATUS  E5K_ClearSingleDICounter   (MODULE_ID id ,USHORT chan);
- E5K_STATUS  E5K_ReadMultiDICounter     (MODULE_ID id,USHORT startchn,USHORT counts, ULONG counterval[]);
- E5K_STATUS  E5K_ReadDIDebounceMode     (MODULE_ID id,USHORT *Mode);
- E5K_STATUS  E5K_SetDIDebounceMode      (MODULE_ID id,USHORT Mode);
 
- # --DO functions--
- E5K_STATUS  E5K_WriteDO                (MODULE_ID id,ULONG dodata);
- E5K_STATUS  E5K_ReadDOStatus           (MODULE_ID id,ULONG *doval);
- E5K_STATUS  E5K_SetDOSingleChannel     (MODULE_ID id,USHORT chano,UCHAR status);
- E5K_STATUS  E5K_SetDOPulseWidth        (MODULE_ID id,USHORT Dochn,USHORT highInterval, USHORT LowInterval);
- E5K_STATUS  E5K_StartDOPulse           (MODULE_ID id,USHORT Dochn,USHORT Pulses);
- E5K_STATUS  E5K_StartMultipleDOPulse   (USHORT id,ULONG Dochnbit,USHORT Pulses[]);
- E5K_STATUS  E5K_ReadDOPulseWidth       (MODULE_ID id,USHORT Dochn,USHORT *highInterval, USHORT *LowInterval);
- E5K_STATUS  E5K_StopDOPulse            (MODULE_ID id,USHORT Dochn);
- E5K_STATUS  E5K_ReadDOPulseCount       (MODULE_ID id,USHORT Dochn,USHORT *counts);
- E5K_STATUS  E5K_SetDOPowerOnValue      (MODULE_ID id,ULONG PowerOnValue);
- E5K_STATUS  E5K_ReadDOPowerOnValue     (MODULE_ID id,ULONG *PowerOnValue);
- E5K_STATUS  E5K_SetDOMultipleChannels  (MODULE_ID id,ULONG dwActchn,UCHAR bMode);
+@dataclass
+class ModuleConfig:
+    mac: MacAddress
+    mask: IpAddress
+    ip: IpAddress
+    gw: IpAddress
+    id: int
+    module_name: str
+    module_desc: str
+    event_sip: list[IpAddress]
+    event_trigger: list[bool]
+    stream_sip: list[IpAddress]
+    stream_active: list[bool]
+    stream_time_interval: int
+    baudrate: int
+    misc_options: MiscOptions
+    options: int
+    version: str
 
- # --DI/O functions
- E5K_STATUS  E5K_ReadDIOActiveLevel     (MODULE_ID id,CHAR  *DIActiveval,CHAR  *DOActiveval);
- E5K_STATUS  E5K_SetDIOActiveLevel      (MODULE_ID id,CHAR  DIActiveval,CHAR DOActiveval);
+    FORMAT = '<6s4s4s4s1B8s32s4s4s4s4s4?4s4s4s4s4?xLBxHH16s'
 
- # --A/D functions--
- E5K_STATUS  E5K_ReadAIChannelType      (MODULE_ID id,USHORT AIChannel,USHORT *AIType);
- E5K_STATUS  E5K_SetAIChannelType       (MODULE_ID id,USHORT AIChannel,USHORT AItype);
- E5K_STATUS  E5K_SetSingleChannelColdJunctionOffset (MODULE_ID id ,USHORT chno,double Cjtemp);
- E5K_STATUS  E5K_ReadSingleChannelColdJunctionOffset(MODULE_ID id,USHORT chno,double *CJoffset);
- E5K_STATUS  E5K_ReadMultiChannelColdJunctionOffset (MODULE_ID id ,USHORT startch,USHORT chcounts,double *Cjtemp);
- E5K_STATUS  E5K_SetMultiChannelColdJunctionOffset  (MODULE_ID id ,USHORT startch,USHORT counts,double *Cjtemp);
- E5K_STATUS  E5K_ReadColdJunctionTemperature(MODULE_ID id,double *CJtemp);
- E5K_STATUS  E5K_ReadColdJunctionStatus     (MODULE_ID id ,CHAR *Cjs);
- E5K_STATUS  E5K_SetColdJunction            (MODULE_ID  id,CHAR opt);
- E5K_STATUS  E5K_ReadAIChannelConfig        (MODULE_ID id ,USHORT chno,AI_CHANNEL_CONFIG *mType);
- E5K_STATUS  E5K_SetAIChannelConfig         (MODULE_ID id ,USHORT ch,AI_CHANNEL_CONFIG *MC);
- E5K_STATUS  E5K_ReadAINormalMultiChannel   (MODULE_ID id ,USHORT startch,USHORT counts,double *AItemp);
- E5K_STATUS  E5K_ReadAIBurnOutStatus        (MODULE_ID id ,USHORT *status);
- E5K_STATUS  E5K_ReadAIAlarmStatus          (MODULE_ID  id,USHORT *HiAlarm,USHORT *LoAlarm);
- E5K_STATUS  E5K_SetAIBurnOut               (MODULE_ID id ,CHAR setting);
- E5K_STATUS  E5K_ReadAIBurnOut              (MODULE_ID id ,CHAR *setting);
- E5K_STATUS  E5K_SetAIModuleFilter          (MODULE_ID id ,USHORT Hz);
- E5K_STATUS  E5K_ReadAIModuleFilter         (MODULE_ID id ,USHORT *Hz);
- E5K_STATUS  E5K_SetAIChannelEnable         (MODULE_ID id ,USHORT AIstatus);
- E5K_STATUS  E5K_ReadAIChannelEnable        (MODULE_ID id ,USHORT *AIstatus);
- E5K_STATUS  E5K_ReadAIMaximumMultiChannel  (MODULE_ID id ,USHORT start,USHORT count,double *AItemp);
- E5K_STATUS  E5K_ReadAIMinimumMultiChannel  (MODULE_ID id ,USHORT start,USHORT count,double *AItemp);
- E5K_STATUS  E5K_ResetAIMaximum             (MODULE_ID  id,USHORT Resetopt);
- E5K_STATUS  E5K_ResetAIMinimum             (MODULE_ID id ,USHORT Restopt);
- E5K_STATUS  E5K_ResetAIHighAlarm           (MODULE_ID id ,USHORT clearoption);
- E5K_STATUS  E5K_ResetAILowAlarm            (MODULE_ID  id,USHORT clearoption);
- E5K_STATUS  E5K_CalibrateAIZeroSpan        (MODULE_ID  id,USHORT Calchno,CHAR Adtype);
- E5K_STATUS  E5K_ReadAIChannelAverage       (MODULE_ID  id,USHORT *AIaverage);
- E5K_STATUS  E5K_SetAIChannelAverage        (MODULE_ID  id,USHORT Option);
+    def __init__(self, data: bytes):
+        values = struct.unpack(self.FORMAT, data)
+        self.mac = values[0]
+        self.mask = values[1]
+        self.ip = values[2]
+        self.gw = values[3]
+        self.id = values[4]
+        self.module_name = values[5].decode().rstrip('\0')
+        self.module_desc = values[6].decode().rstrip('\0')
+        self.event_sip = values[7:11]
+        self.event_trigger = values[11:15]
+        self.stream_sip = values[15:19]
+        self.stream_active = values[19:23]
+        self.stream_time_interval = values[23]
+        self.baudrate = values[24]
+        self.misc_options = MiscOptions(values[25])
+        self.options = values[26]
+        self.version = values[27]
 
- # --LED functions--
- E5K_STATUS  E5K_SetLEDControl              (MODULE_ID id,CHAR ControlOption);
- E5K_STATUS  E5K_WriteDataToLED             (MODULE_ID id,ULONG LedData);
- E5K_STATUS  E5K_FlashLED                   (MODULE_ID id,ULONG LedData,USHORT FlashCounts);
 
-# --- Advanced TCP/IP functions for multiple NIC cards --------------------------------
- SHORT       E5K_OpenModuleIPEx      (CHAR Ip[],ULONG ConnectTimeout,ULONG TxTimeout,ULONG RxTimeout,CHAR HostIP[]);
- USHORT      E5K_IsIPInLocalSubnetEx (CHAR *bRemoteIP,CHAR HostIp[]);
- SOCKET      E5K_TCPConnectEx        (CHAR szIP[], u_short port,INT iConnectionTimeout,INT iSendTimeout,INT iReceiveTimeout,CHAR HostIP[]);
- SOCKET      E5K_UDPConnectEx        (CHAR szIP[],u_short s_port,u_short d_port,INT iConnectionTimeout,INT iSendTimeout,INT iReceiveTimeout,BOOL *Insubnet,CHAR HostIP[]);
- LONG        E5K_StartStreamEventEx  (CHAR *TargetIP,CHAR *HostIP) ;
- LONG        E5K_StartAlarmEventIPEx (CHAR *TargetIP,CHAR *HostIP) ;
+@dataclass
+class ModuleData:
+    d_in: int
+    d_out: int
+    di_latch: int
+    di_counter: list[int]
+    ai_normal_value: list[float]
+    ai_max_value: list[float]
+    ai_min_value: list[float]
+    ai_high_alarm_status: int
+    ai_low_alarm_status: int
+    ai_burnout: int
+    cjc_temperature: float
+    ao_value: list[float]
 
-# ---- TCP --------------------------------------------------------------------------
- USHORT      E5K_IsValidIPAddress   (CHAR *bRemoteIP);
- USHORT      E5K_IsIPInLocalSubnet   (CHAR *bRemoteIP);
- USHORT      E5K_TCPSendData         (SOCKET sock,CHAR *pData,u_short wDataLen);
- USHORT      E5K_TCPRecvData         (SOCKET sock,CHAR *pData,u_short wBufferLen);
- USHORT      E5K_TCPPing             (CHAR zIP[],INT timeout);
- USHORT      E5K_TCPAllDisconnect    (void);
- USHORT      E5K_TCPDisconnect       (SOCKET sock);
- SOCKET      E5K_TCPConnect          (CHAR szIP[], u_short port,INT iConnectionTimeout,INT iSendTimeout,INT iReceiveTimeout);
+    FORMAT = '>x3L32L16h16h16h4H16h'
 
-# ---- UDP ----------------------------------------------------------------------------
- USHORT      E5K_UDPSendData         (SOCKET sock,CHAR *pData,u_short wDataLen);
- USHORT      E5K_UDPRecvData         (SOCKET sock,CHAR *pData,u_short wBufferLen);
- USHORT      E5K_UDPSendASCStr       (SOCKET  sock,CHAR *pstrData);
- USHORT      E5K_UDPRecvASCStr       (SOCKET  sock,CHAR *pstrData,u_short wStrbufferlen);
- USHORT      E5K_UDPDisconnect       (SOCKET  sock);
- USHORT      E5K_UDPAllDisconnect    (void);
- SOCKET      E5K_UDPConnect         (CHAR szIP[],u_short s_port,u_short d_port,INT iConnectionTimeout,INT iSendTimeout,INT iReceiveTimeout,BOOL *Insubnet);
-# ---- COMM Port ----------------------------------------------------------------------
- INT         COMM_Write              (INT ComPortNumber,UCHAR *pBuf,INT Buflen);
- INT         COMM_Read               (INT ComPortNumber,UCHAR *pBuf,INT Buflen);
- INT         COMM_ReadASCII          (INT ComPortNumber,UCHAR *pBuf,INT Buflen);
- INT         COMM_Close              (INT ComPortNumber);
- INT         COMM_Open               (INT ComPortNumber,LONG baudrate, LONG rxTotalTime,LONG rxTimeOutInterval);
- INT         COMM_ClearRX            (INT ComPortNumber);
- E5K_STATUS  WINAPI E5K_SetRXTimeOutOption  (ULONG RxTotalTimeout,ULONG RxChrTimeOutInterval);
- INT         COMM_SetRxTotalTimeOut  (INT ComPortNumber, LONG RxTotalTimeOut) ;//,long RxCharElapseTime);
- LONG        COMM_ReadRxTotalTimeOut (INT comp);
- INT         COMM_SetRxCharElapseTime(INT comp, LONG RxCharElapseTime);
- LONG        COMM_ReadRxCharElapseTime(INT comp);
- ULONG       COMM_FileOpen           (CHAR *Filename);
- void        COMM_FileClose          (void);
- ULONG       COMM_FileRead           (CHAR *pbuf,ULONG Fileoffset,ULONG bufLen);
+    def __init__(self, data: bytes):
+        values = struct.unpack(self.FORMAT, data)
+        self.d_in = values[0]
+        self.d_out = values[1]
+        self.di_latch = values[2]
+        self.di_counter = values[3:35]
+        # TODO: Values depend on configured channel type
+        self.ai_normal_value = int_to_temp(values[35:51])
+        self.ai_max_value = int_to_temp(values[51:67])
+        self.ai_min_value = int_to_temp(values[67:83])
+        self.ai_high_alarm_status = values[83]
+        self.ai_low_alarm_status = values[84]
+        self.ai_burnout = values[85]
+        self.cjc_temperature = values[86] / 10
+        # TODO: AO values require different scale
+        self.ao_value = [int_to_temp(x) for x in values[87:102]]
 
-# ---- PGM ----------------------------------------------------------------------
- ULONG       E5K_USBPgmOpen          (CHAR *DevInfo);  //0 to 63
- INT         E5K_USBPgmClose         (ULONG hfile);
- USHORT      E5K_USBPgmWrite         (ULONG hFile,CHAR *buffer,USHORT size);
- USHORT      E5K_USBPgmRead          (ULONG hFile,CHAR *buffer,USHORT BufferSize, ULONG timeout);
 
-# -- Reserved for calibration, Do not use following functions in your application
-E5K_STATUS   E5K_WriteAICalibrationCoefficient (MODULE_ID  id,ULONG Coefficient,CHAR Regtype);
-E5K_STATUS   E5K_ReadAICalibrationCoefficient  (MODULE_ID  id,ULONG *Coefficient,CHAR Regtype);
-INT          E5K_BuildHtmFileSystemX           (CHAR *CfgFileName,CHAR *OutFileName,CHAR  *Errmsg);
-void         E5K_DebugPrint (char *s);
+class E5KDAQ:
+    '''Python implementation of InLog E5KDAQ interface.
+    Communication method is abstracted to an inherited class.
+    '''
+    def __init__(self, device_id: int):
+        self.device_id = device_id
 
-#ifdef __cplusplus
-  }
-#endif
+    def flush(self):
+        raise NotImplemented()
 
-#endif
+    def send_request(self, request: bytes) -> bytes:
+        raise NotImplemented()
 
+
+class USBDAQ(E5KDAQ):
+    def open(self):
+        self.dev = usb.core.find(idVendor=0x04b4, idProduct=0x8613)
+        # print(dev)
+        assert self.dev
+        # dev.set_configuration()
+        cfg = self.dev.get_active_configuration()
+        intf = cfg.interfaces()[0]
+        self.ep0, self.ep1 = intf.endpoints()[0:2]
+        self.flush
+
+    def flush(self):
+        try:
+            while True:
+                self.ep1.read(64, timeout=50)
+        except usb.core.USBTimeoutError:
+            pass
+
+    def send_request(self, request: bytes) -> bytes:
+        '''Send a request and return response'''
+        MAGIC = 0x77553388
+        PACKET_SIZE = 64
+        # MAGIC: 88 33 55 77 .3Uw
+        buf = struct.pack('<LH', MAGIC, len(request)) + request
+        packet_count = (len(buf) + PACKET_SIZE - 1) // PACKET_SIZE
+        self.ep0.write(buf.ljust(packet_count * PACKET_SIZE, b'\0'))
+        # First response packet contains actual length: use that instead of timeout
+        buf = bytes(self.ep1.read(PACKET_SIZE))
+        hdr, rsplen = struct.unpack('<LH', buf[:6])
+        rsp = buf[6:6+rsplen]
+        while len(rsp) < rsplen:
+            buf = bytes(self.ep1.read(PACKET_SIZE))
+            rsp += buf[:rsplen - len(rsp)]
+        return rsp
