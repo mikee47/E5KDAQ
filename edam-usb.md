@@ -33,17 +33,19 @@ e.g. do_module_config_request()
 
 0x00 BYTE id
 0x01 BYTE 'F' (0x46)
-0x02 BYTE 0x30: READ
-          0x31
-          0x32
-          0x33
-          0x40: READ
-          0x41: READ channel types?
+0x02 BYTE 0x30: Read module config
+          0x31: Write module config
+          0x32: Write module config? No authentication required. See `so_set_module_config_ll`.
+          0x33: Set password
+          0x40: Read module data
+          0x41: Read channel types
 0x03 BYTE unused
 0x04 data[]
 
+### READ 0x30: Read module config
 
-  0: 01 46 30
+> 01 46 30 00
+< 01 46 30
   0: 00 e0 4c 36 01 55         MAC
   6: ff ff ff 00               MASK
  10: c0 a8 01 0b               IP 192.168.1.11
@@ -110,10 +112,31 @@ Misc Options 0x0590
 31: 00            DHCP_flag (0), WebReadOnlyFlag (0)
 
 
-READ 0x41: Get channel types
+### READ 0x33: Set password
 
-< 37
-01 46 41
+Default password is "00000000".
+Example password "01234567":
+
+Presumably this is a reversible algorithm.
+
+```
+// ULONGLONG(password) == 0x37363534333231
+memcpy(tmpbuf, newPassWord, newlength);
+// 0x34333231 / 0xd5 == 0x003ebcee
+uVar1 = ((ulonglong)tmpbuf & 0xffffffff) / 0xd5;
+buffer._0_4_ = (undefined4)uVar1;
+// 0x37363534333231 / 0xd500000000 = 0x0000425b
+buffer._4_4_ = (undefined4)((ulonglong)tmpbuf / 0xd500000000);
+// -0xd5 = 0xffffff2b
+buffer[5] = tmpbuf._4_2_ + (short)((ulonglong)tmpbuf / 0xd500000000) * -0xd5;
+buffer[4] = tmpbuf._0_2_ + (short)uVar1 * -0xd5;
+```
+
+
+### READ 0x41: Get channel types
+
+> 01 46 41 00
+< 01 46 41
 90 05 c0 a8 01 0b ff ff ff 00 c0 a8 01 01 00 00 00 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10
 
  0: 90 05                   0x0590 Same as from MISC command
@@ -131,7 +154,7 @@ See decompiled `read_device_data` function.
 Information returned from `E5K_GetModuleIOChannels`.
 
 
-## E5K_ReadAllDataFromModule
+### Read 0x40 E5K_ReadAllDataFromModule
 
 Code appears model-specific.
 
@@ -156,7 +179,8 @@ struct MODULE_DATA
 
 module_config_request(0x40) returns 280 bytes:
 
-01 46 00           HEADER
+> 01 46 40
+< 01 46 00           HEADER
   0:    00
   1:    00 00 00 00
   5:    00 00 00 01
@@ -343,3 +367,27 @@ cccccccc = dwActchn
 
 Just repeats `Write Single Do Pulse Counts` and `Start/Stop DO Pulse Counts` for each channel.
 
+
+## E5K_ReadDIChannelConfig
+
+>   6: %01C00
+<  11: b'!0100000A0\r'
+    !01
+    00      wType
+    000A    wdi_debounce_timeinterval
+    0       wIntstatus
+
+
+## E5K_SetDIChannelConfig
+
+MODULE_ID id ,USHORT chn,DI_CHANNEL_CONFIG *Mode
+
+sprintf(local_148,"%c%002XC%002X%002X%00004X%01X",'%', id, chn, wType, wdi_debounce_timeinterval, wIntstatus);
+
+"%%AACccttddddi"
+
+AA
+cc      Type
+tt      Channel
+dddd    Debounce time interval
+i       Interrupt status

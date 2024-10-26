@@ -380,22 +380,38 @@ def main():
     data = struct.pack('>BBHH', id, ModbusFunction.WriteSingleCoil, 10064, 0x0001)
     send_hex_request(data, 'Write single coil')
 
-    # Read input registers
-    data = struct.pack('>BBHH', id, ModbusFunction.ReadInputRegisters, 30293, 17)
-    rsp = send_hex_request(data, 'Read input registers')
-    data = struct.unpack('>3x17h', rsp)
-    print(data)
+    def read_input_registers(id: int, addr: int, count: int) -> list:
+        data = struct.pack('>BBHH', id, ModbusFunction.ReadInputRegisters, addr, count)
+        rsp = send_hex_request(data, 'Read input registers')
+        data = struct.unpack(f'>3x{count}h', rsp)
+        print(data)
+        return data
+
+    # Read cold junction temperature plus all channels
+    data = read_input_registers(id, 30293, 17)
     print('@', [x/10 for x in data])
 
-    # get module config
+    # Read channel types
+    read_input_registers(id, 30348, 16)
+
+    # Read digital inputs types
+    read_input_registers(id, 30080, 2)
+
+    # Read base register range
+    read_input_registers(id, 0, 2)
+
+    # Read ModuleConfig
     data = struct.pack('>BBBB', id, 0x46, 0x30, 0)
     rsp = send_hex_request(data, 'Get module config')
     config = ModuleConfig(rsp[3:])
     print(config)
     print(f'OPTIONS: {config.options:x}')
 
-    # ModuleConfigX
+    # Read ModuleConfigX
     rsp = send_asc_request('%01GETFIXADDR', 'ModuleConfigX')
+
+    # E5K_ReadDIChannelConfig
+    rsp = send_asc_request('%01C00', 'ReadDIChannelConfig')
 
     # E5K_ReadAllDataFromModule
     data = struct.pack('>BBBB', id, 0x46, 0x40, 0)
@@ -403,7 +419,7 @@ def main():
     module_data = ModuleData(rsp[3:])
     print(module_data)
 
-    # get channel types
+    # Read channel types
     data = struct.pack('>BBBB', id, 0x46, 0x41, 0)
     rsp = send_hex_request(data, 'Get channel types')
     print(hex_to_str(rsp))
