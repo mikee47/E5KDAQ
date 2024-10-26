@@ -169,6 +169,14 @@ def int_to_temp(value: int, scale: float = 1370.0):
 
 
 @dataclass
+class DeviceInfo:
+    id: int
+    model: int
+    name: str
+    desc: str
+
+
+@dataclass
 class ModuleConfig:
     mac: MacAddress
     mask: IpAddress
@@ -268,6 +276,18 @@ class USBDAQ(E5KDAQ):
         intf = cfg.interfaces()[0]
         self.ep0, self.ep1 = intf.endpoints()[0:2]
         self.flush
+        self.read_device_info()
+
+    def read_device_info(self) -> DeviceInfo:
+        data = self.send_request(b'$00IM\r')
+        self.id = int(data[1:3], 16)
+        self.model = int(data[3:7], 16)
+        self.name = data[7:15].decode()
+        self.desc = data[15:-1].decode()
+
+    @property
+    def info(self) -> ModelInfo:
+        return MODELINFO[self.model]
 
     def flush(self):
         try:

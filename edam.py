@@ -23,7 +23,9 @@ def main():
         print(f'< {len(response):3d}: {hex_to_str(response)}')
         return response
 
-    send_asc_request('$00IM', 'Undocumented')
+    print(f'id {daq.id:x}, model {daq.model:x}, name "{daq.name}", desc "{daq.desc}"')
+    print(daq.info)
+
     send_asc_request('$00F', 'Read firmware version')
     send_asc_request('$00MISC', 'Undocumented')
     send_asc_request('$00M', 'Read module name')

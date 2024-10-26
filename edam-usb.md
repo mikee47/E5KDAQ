@@ -352,6 +352,9 @@ One reason for this could be that the data is unambiguously returned in binary f
 `E5K_ReadAIMaximumMultiChannel` @ 1600
 `E5K_ReadAIMinimumMultiChannel` @ 1700
 
+Looks like published registers don't require offsets (the `N+` bit in the docs).
+Think that's a MODBUS thing...
+
 
 ## E5K_SetDOMultipleChannels
 
@@ -391,3 +394,16 @@ cc      Type
 tt      Channel
 dddd    Debounce time interval
 i       Interrupt status
+
+
+## Get device info
+
+>   5: $00IM
+<  45: b'!015019MyLongNm16 T/C Channels and 2 DI/1 DO\r'
+
+
+!
+01
+5019                                Model number
+MyLongNm                            User-configured name (8 chars)
+16 T/C Channels and 2 DI/1 DO       Description
