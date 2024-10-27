@@ -133,7 +133,7 @@ buffer[4] = tmpbuf._0_2_ + (short)uVar1 * -0xd5;
 ```
 
 
-### READ 0x41: Get channel types
+### READ 0x41: E5K_GetModuleIOChannels
 
 > 01 46 41 00
 < 01 46 41
@@ -147,11 +147,10 @@ buffer[4] = tmpbuf._0_2_ + (short)uVar1 * -0xd5;
 16: 00                      digital output type
 17: 10 10 10 10 10 10 10 10 analogue input types 0-7
 25: 10 10 10 10 10 10 10 10 " 8-15
-33: 10                      Presumably for CJC
+33: 10                      Presumably for average
 
 Number of channels depends on device type, requires lookup table.
 See decompiled `read_device_data` function.
-Information returned from `E5K_GetModuleIOChannels`.
 
 
 ### Read 0x40 E5K_ReadAllDataFromModule

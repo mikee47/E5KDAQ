@@ -7,8 +7,8 @@ from array import array as Array
 
 PACKET_SIZE = 64
 
-IpAddress = bytes
-MacAddress = bytes
+IpAddress = str
+MacAddress = str
 
 @dataclass
 class ModelInfo:
@@ -162,6 +162,14 @@ class ChannelType(IntEnum):
     Ni604_TYPE2     = 0x2d  # Ni           0C ~ 100C
 
 
+def ip_to_str(data: bytes) -> str:
+    return '.'.join(str(x) for x in data)
+
+
+def mac_to_str(data: bytes) -> str:
+    return data.hex(':')
+
+
 def int_to_temp(value: int, scale: float = 1370.0):
     '''Obtain temperature values'''
     if isinstance(value, Sequence):
@@ -200,22 +208,54 @@ class ModuleConfig:
 
     def __init__(self, data: bytes):
         values = struct.unpack(self.FORMAT, data)
-        self.mac = values[0]
-        self.mask = values[1]
-        self.ip = values[2]
-        self.gw = values[3]
+        self.mac = mac_to_str(values[0])
+        self.mask = ip_to_str(values[1])
+        self.ip = ip_to_str(values[2])
+        self.gw = ip_to_str(values[3])
         self.id = values[4]
         self.module_name = values[5].decode().rstrip('\0')
         self.module_desc = values[6].decode().rstrip('\0')
-        self.event_sip = values[7:11]
+        self.event_sip = [ip_to_str(x) for x in values[7:11]]
         self.event_trigger = values[11:15]
-        self.stream_sip = values[15:19]
+        self.stream_sip = [ip_to_str(x) for x in values[15:19]]
         self.stream_active = values[19:23]
         self.stream_time_interval = values[23]
         self.baudrate = values[24]
         self.misc_options = MiscOptions(values[25])
         self.options = values[26]
         self.version = values[27]
+
+
+@dataclass
+class ModuleIoChannels:
+    misc: int # Same as from MISC command, not sure what that is
+    ip_addr: str
+    netmask: str
+    gateway: str
+    digital_input_types: list
+    digital_output_types: list
+    analogue_input_types: list[ChannelType]
+    average_type: ChannelType
+
+    def __init__(self, model: int, data: bytes):
+        info = MODELINFO[model]
+
+        FORMAT = '<H4s4s4s' \
+            + f'{info.num_digital_input_channels}s' \
+            + f'{info.num_digital_output_channels}s' \
+            + f'{info.num_analogue_input_channels}s'
+        if info.num_analogue_input_channels:
+            FORMAT += 'B'
+
+        values = struct.unpack(FORMAT, data)
+        self.misc = values[0]
+        self.ip_addr = ip_to_str(values[1])
+        self.netmask = ip_to_str(values[2])
+        self.gateway = ip_to_str(values[3])
+        self.digital_input_types = [int(x) for x in values[4]]
+        self.digital_output_types = [int(x) for x in values[5]]
+        self.analogue_input_types = [ChannelType(x) for x in values[6]]
+        self.average_type = ChannelType(values[7]) if info.num_analogue_input_channels else None
 
 
 @dataclass
@@ -253,6 +293,27 @@ class ModuleData:
         self.ao_value = [int_to_temp(x) for x in values[87:102]]
 
 
+class ReaderProperty():
+    def __init__(self, req: str, rsp_hdrlen: int = 3):
+        self.req = req
+        self.rsp_hdrlen = rsp_hdrlen
+
+    # def getter(self, fget):
+    #     return ReaderProperty(fget, None, None, None)
+
+    # def setter(self, fset: Callable[[Any, Any], None]) -> property: ...
+    # def deleter(self, fdel: Callable[[Any], None]) -> property: ...
+
+    def __get__(self, obj, objtype=None):
+        return obj.read_prop(self.req, self.rsp_hdrlen)
+
+    # def __set__(self, obj: Any, value: Any) -> None: ...
+    # def __delete__(self, obj: Any) -> None: ...
+    # def fget(self) -> Any: ...
+    # def fset(self, value: Any) -> None: ...
+    # def fdel(self) -> None: ...
+
+
 class E5KDAQ:
     '''Python implementation of InLog E5KDAQ interface.
     Communication method is abstracted to an inherited class.
@@ -268,6 +329,16 @@ class E5KDAQ:
 
 
 class USBDAQ(E5KDAQ):
+    version = ReaderProperty('$F')
+    ipaddr = ReaderProperty('$IP')
+    gateway = ReaderProperty('$GATE')
+    netmask = ReaderProperty('$MASK')
+    macaddr = ReaderProperty('^MAC')
+    module_name = ReaderProperty('$M')
+    analogue_inputs_normal = ReaderProperty('#', 1)
+    analogue_inputs_max = ReaderProperty('#MH', 1)
+    analogue_inputs_min = ReaderProperty('#ML', 1)
+
     def open(self):
         self.dev = usb.core.find(idVendor=0x04b4, idProduct=0x8613)
         # print(dev)
@@ -278,6 +349,11 @@ class USBDAQ(E5KDAQ):
         self.ep0, self.ep1 = intf.endpoints()[0:2]
         self.flush
         self.read_device_info()
+
+    def read_prop(self, req: str, rsp_hdrlen: int):
+        req = req[0] + f'{self.id:02X}' + req[1:] + '\r'
+        rsp = self.send_request(req.encode())
+        return rsp[rsp_hdrlen:].decode()
 
     def read_device_info(self) -> DeviceInfo:
         data = self.send_request(b'$00IM\r')
@@ -314,6 +390,36 @@ class USBDAQ(E5KDAQ):
             rsp += buf[:rsplen - len(rsp)]
         return rsp
 
+    def send_config_request(self, code: int):
+        '''Send internal configuration request
+
+        This is undocumented and looks like a modbus request with function 0x46.
+        Command codes are:
+
+            0x30: Read module config
+            0x31: Write module config
+            0x32: Write module config? No authentication required. See `so_set_module_config_ll`.
+            0x33: Set password
+            0x40: Read module data
+            0x41: Read channel types
+        '''
+        req = struct.pack('>BBBB', self.id, 0x46, code, 0)
+        rsp = self.send_request(req)
+        return rsp[3:]
+
+    def read_module_config(self) -> ModuleConfig:
+        data = self.send_config_request(0x30)
+        return ModuleConfig(data)
+
+    def read_module_data(self) -> ModuleData:
+        '''Implementation of E5K_ReadAllDataFromModule API call'''
+        data = self.send_config_request(0x40)
+        return ModuleData(data)
+
+    def read_module_iochannels(self) -> ModuleIoChannels:
+        data = self.send_config_request(0x41)
+        return ModuleIoChannels(self.model, data)
+
     def read_input_registers(self, addr: int, count: int, regtype: type = int) -> list[int]:
         '''Read a set of MODBUS input registers
 
@@ -337,14 +443,14 @@ class USBDAQ(E5KDAQ):
         rsp = self.send_request(req)
         return Array('d', [float(rsp[o:o+7]) for o in range(1, len(rsp)-2, 7)])
 
-    def read_discrete_inputs(self, addr: int, count: int) -> Array['b']:
+    def read_coils(self, addr: int, count: int) -> Array['b']:
         req = struct.pack('>BBHH', self.id, ModbusFunction.ReadCoils, addr, count)
         rsp = self.send_request(req)
         print(rsp.hex(' '))
         bits = int.from_bytes(rsp[3:], byteorder='little', signed=False)
         return Array('B', [((bits >> i) & 1) for i in range(count)])
 
-    def write_discrete_inputs(self, addr: int, data: list):
+    def write_coils(self, addr: int, data: list):
         bits = 0
         bit_count = len(data)
         for x in reversed(data):

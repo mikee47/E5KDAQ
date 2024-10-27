@@ -10,6 +10,10 @@ def main():
     daq = e5kdaq.USBDAQ(0)
     daq.open()
 
+    for name, prop in type(daq).__dict__.items():
+        if isinstance(prop, e5kdaq.ReaderProperty):
+            print(f'{name} = {getattr(daq, name)}')
+
     def send_asc_request(request: str, comment: str):
         print(comment)
         print(f'> {len(request):3d}: {request}')
@@ -24,7 +28,7 @@ def main():
         print(f'< {len(response):3d}: {hex_to_str(response)}')
         return response
 
-    def read_input_registers(id: int, addr: int, count: int, comment: str) -> list:
+    def read_input_registers(addr: int, count: int, comment: str) -> list:
         print(comment)
         data = daq.read_input_registers(addr, count)
         print('<', data)
@@ -67,23 +71,18 @@ def main():
 
     # def send_modbus_request(id: int, command: int, addr: int, args: bytes):
 
-
-    id = 0x01
-    # Read coil status
-    data = struct.pack('>BBHH', id, ModbusFunction.ReadCoils, 10064, 1)
-    send_hex_request(data, 'Read coil status')
+    print('Read DO: ', daq.read_coils(64, 1)[0])
 
     print('Enable/disable channels')
-    daq.write_discrete_inputs(256, [0, 1, 0, 0,   0, 0, 1, 0,   0, 0, 0, 1,   0, 0, 0, 0])
+    daq.write_coils(256, [0, 1, 0, 0,   0, 0, 1, 0,   0, 0, 0, 1,   0, 0, 0, 0])
 
-    data = daq.read_discrete_inputs(256, 16)
-    print('@@', data)
+    data = daq.read_coils(256, 16)
+    print('Analogue channel status', data)
 
-    # Write single coil
-    data = struct.pack('>BBHH', id, ModbusFunction.WriteSingleCoil, 10064, 0x0001)
-    send_hex_request(data, 'Write single coil')
+    print('Set DO')
+    daq.write_coils(64, [1])
 
-    data = read_input_registers(id, 293, 17, 'Read CJC and channels')
+    data = read_input_registers(293, 17, 'Read CJC and channels')
     print('@', [x/10 for x in data])
 
     print('Read analogue input types')
@@ -94,13 +93,11 @@ def main():
     data = daq.read_analogue_inputs()
     print(data)
 
-    read_input_registers(id, 30080, 2, 'Read digital inputs types')
-    read_input_registers(id, 0, 2, 'Read base register range')
+    read_input_registers(30080, 2, 'Read digital inputs types')
+    read_input_registers(0, 2, 'Read base register range')
 
     # Read ModuleConfig
-    data = struct.pack('>BBBB', id, 0x46, 0x30, 0)
-    rsp = send_hex_request(data, 'Get module config')
-    config = ModuleConfig(rsp[3:])
+    config = daq.read_module_config()
     print(config)
     print(f'OPTIONS: {config.options:x}')
 
@@ -110,16 +107,13 @@ def main():
     # E5K_ReadDIChannelConfig
     rsp = send_asc_request('%01C00', 'ReadDIChannelConfig')
 
-    # E5K_ReadAllDataFromModule
-    data = struct.pack('>BBBB', id, 0x46, 0x40, 0)
-    rsp = send_hex_request(data, 'E5K_ReadAllDataFromModule')
-    module_data = ModuleData(rsp[3:])
-    print(module_data)
+    print('E5K_ReadAllDataFromModule', daq.read_module_data())
 
-    # Read channel types
-    data = struct.pack('>BBBB', id, 0x46, 0x41, 0)
-    rsp = send_hex_request(data, 'Get channel types')
-    print(hex_to_str(rsp))
+    print('E5K_ReadModuleIOChannels', daq.read_module_iochannels())
+
+    print('Get module IO Channels')
+    data = daq.send_config_request(0x41)
+    print(hex_to_str(data))
 
     # Read channels burnout status
     send_asc_request('$01B', 'Read channels burnout status')
