@@ -59,15 +59,7 @@ def main():
 
     send_asc_request('$016', 'Read channel enable/disable status')
 
-    if False:
-        ip = [192, 168, 1, 11]
-        gw = [192, 168, 1, 1]
-        mask = [255, 255, 255, 0]
-        def hex_str(x: list[int]):
-            return bytes(x).hex().upper()
-        send_asc_request('$01IP' + hex_str(ip), 'Set IP')
-        send_asc_request('$01GATE' + hex_str(gw), 'Set GW')
-        send_asc_request('$01MASK' + hex_str(mask), 'Set Mask')
+    daq.set_ip_address('192.168.1.11', '192.168.1.1', '255.255.255.255')
 
     # def send_modbus_request(id: int, command: int, addr: int, args: bytes):
 

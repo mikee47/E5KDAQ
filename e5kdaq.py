@@ -4,10 +4,10 @@ from enum import IntEnum
 from dataclasses import dataclass
 from collections.abc import Sequence
 from array import array as Array
+from ipaddress import IPv4Address
 
 PACKET_SIZE = 64
 
-IpAddress = str
 MacAddress = str
 
 @dataclass
@@ -188,15 +188,15 @@ class DeviceInfo:
 @dataclass
 class ModuleConfig:
     mac: MacAddress
-    mask: IpAddress
-    ip: IpAddress
-    gw: IpAddress
+    netmask: IPv4Address
+    ipaddr: IPv4Address
+    gateway: IPv4Address
     id: int
     module_name: str
     module_desc: str
-    event_sip: list[IpAddress]
+    event_sip: list[IPv4Address]
     event_trigger: list[bool]
-    stream_sip: list[IpAddress]
+    stream_sip: list[IPv4Address]
     stream_active: list[bool]
     stream_time_interval: int
     baudrate: int
@@ -209,9 +209,9 @@ class ModuleConfig:
     def __init__(self, data: bytes):
         values = struct.unpack(self.FORMAT, data)
         self.mac = mac_to_str(values[0])
-        self.mask = ip_to_str(values[1])
-        self.ip = ip_to_str(values[2])
-        self.gw = ip_to_str(values[3])
+        self.netmask = ip_to_str(values[1])
+        self.ipaddr = ip_to_str(values[2])
+        self.gateway = ip_to_str(values[3])
         self.id = values[4]
         self.module_name = values[5].decode().rstrip('\0')
         self.module_desc = values[6].decode().rstrip('\0')
@@ -229,9 +229,9 @@ class ModuleConfig:
 @dataclass
 class ModuleIoChannels:
     misc: int # Same as from MISC command, not sure what that is
-    ip_addr: str
-    netmask: str
-    gateway: str
+    ipaddr: IPv4Address
+    netmask: IPv4Address
+    gateway: IPv4Address
     digital_input_types: list
     digital_output_types: list
     analogue_input_types: list[ChannelType]
@@ -249,9 +249,9 @@ class ModuleIoChannels:
 
         values = struct.unpack(FORMAT, data)
         self.misc = values[0]
-        self.ip_addr = ip_to_str(values[1])
-        self.netmask = ip_to_str(values[2])
-        self.gateway = ip_to_str(values[3])
+        self.ipaddr = IPv4Address(values[1])
+        self.netmask = IPv4Address(values[2])
+        self.gateway = IPv4Address(values[3])
         self.digital_input_types = [int(x) for x in values[4]]
         self.digital_output_types = [int(x) for x in values[5]]
         self.analogue_input_types = [ChannelType(x) for x in values[6]]
@@ -459,3 +459,12 @@ class USBDAQ(E5KDAQ):
         values = bits.to_bytes(byte_count, byteorder='little', signed=False)
         req = struct.pack('>BBHHB', self.id, ModbusFunction.WriteMultipleCoils, addr, len(data), byte_count) + values
         self.send_request(req)
+
+    def set_ip_address(self, ipaddr: any, gateway: any, netmask: any):
+        def setaddr(tag: str, addr: any):
+            addr = IPv4Address(addr).packed.hex().upper()
+            req = f'${self.id:02X}{tag}{addr}\r'.encode()
+            self.send_request(req)
+        setaddr('IP', ipaddr)
+        setaddr('GATE', gateway)
+        setaddr('MASK', netmask)
