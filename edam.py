@@ -5,6 +5,7 @@ import struct
 def hex_to_str(data: bytes) -> str:
     return data.hex(' ')
 
+
 def main():
     daq = e5kdaq.USBDAQ(0)
     daq.open()
@@ -22,6 +23,12 @@ def main():
         response = daq.send_request(request)
         print(f'< {len(response):3d}: {hex_to_str(response)}')
         return response
+
+    def read_input_registers(id: int, addr: int, count: int, comment: str) -> list:
+        print(comment)
+        data = daq.read_input_registers(addr, count)
+        print('<', data)
+        return data
 
     print(f'id {daq.id:x}, model {daq.model:x}, name "{daq.name}", desc "{daq.desc}"')
     print(daq.info)
@@ -46,6 +53,7 @@ def main():
     send_asc_request('$01GATE', 'Read gateway address')
     send_asc_request('$01MASK', 'Read network mask')
 
+    send_asc_request('$016', 'Read channel enable/disable status')
 
     if False:
         ip = [192, 168, 1, 11]
@@ -65,29 +73,29 @@ def main():
     data = struct.pack('>BBHH', id, ModbusFunction.ReadCoils, 10064, 1)
     send_hex_request(data, 'Read coil status')
 
+    print('Enable/disable channels')
+    daq.write_discrete_inputs(256, [0, 1, 0, 0,   0, 0, 1, 0,   0, 0, 0, 1,   0, 0, 0, 0])
+
+    data = daq.read_discrete_inputs(256, 16)
+    print('@@', data)
+
     # Write single coil
     data = struct.pack('>BBHH', id, ModbusFunction.WriteSingleCoil, 10064, 0x0001)
     send_hex_request(data, 'Write single coil')
 
-    def read_input_registers(id: int, addr: int, count: int) -> list:
-        data = struct.pack('>BBHH', id, ModbusFunction.ReadInputRegisters, addr, count)
-        rsp = send_hex_request(data, 'Read input registers')
-        data = struct.unpack(f'>3x{count}h', rsp)
-        print(data)
-        return data
-
-    # Read cold junction temperature plus all channels
-    data = read_input_registers(id, 30293, 17)
+    data = read_input_registers(id, 293, 17, 'Read CJC and channels')
     print('@', [x/10 for x in data])
 
-    # Read channel types
-    read_input_registers(id, 30348, 16)
+    print('Read analogue input types')
+    types = daq.read_analogue_input_types()
+    print([x.name for x in types])
 
-    # Read digital inputs types
-    read_input_registers(id, 30080, 2)
+    print('Read analogue inputs')
+    data = daq.read_analogue_inputs()
+    print(data)
 
-    # Read base register range
-    read_input_registers(id, 0, 2)
+    read_input_registers(id, 30080, 2, 'Read digital inputs types')
+    read_input_registers(id, 0, 2, 'Read base register range')
 
     # Read ModuleConfig
     data = struct.pack('>BBBB', id, 0x46, 0x30, 0)

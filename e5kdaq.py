@@ -3,6 +3,7 @@ import struct
 from enum import IntEnum
 from dataclasses import dataclass
 from collections.abc import Sequence
+from array import array as Array
 
 PACKET_SIZE = 64
 
@@ -130,35 +131,35 @@ class Options:
 
 
 class ChannelType(IntEnum):
-    B10V_TYPE = 0x07        # bipolar +/-10V
-    B5V_TYPE = 0x08         # bipolar +/-5V
-    B2P5V_TYPE = 0x09       # bipolar +/-2.5V
-    B1V_TYPE = 0x0a         # bipolar +/-1V
-    B500MV_TYPE = 0x0b      # bipolar +/-500mV
-    B150MV_TYPE = 0x0c      # bipolar +/-150mV
-    U20MA_TYPE = 0x0d       # unipolar 0-20mA (250 ohms)
-    B4T20MA_TYPE = 0x0e     # bipolar 4-20mA (250 ohms)
-    TC_J_TYPE = 0x0F        # T/C J type
-    TC_K_TYPE = 0x10        # T/C K type
-    TC_T_TYPE = 0x11        # T/C T type
-    TC_E_TYPE = 0x12        # T/C E type
-    TC_R_TYPE = 0x12        # T/C R type
-    TC_S_TYPE = 0x14        # T/C S type
-    TC_B_TYPE = 0x15        # T/C B type
-    IECPT100_TYPE1 = 0x20   # IEC Pt100  -50C ~ 150C
-    IECPT100_TYPE2 = 0x21   # IEC Pt100    0C ~ 100C
-    IECPT100_TYPE3 = 0x22   # IEC Pt100    0C ~ 200C
-    IECPT100_TYPE4 = 0x23   # IEC Pt100    0C ~ 400C
-    IECPT100_TYPE5 = 0x24   # IEC Pt100 -200C ~ 200C
-    JISPT100_TYPE1 = 0x25   # JIS Pt100  -50C ~ 150C
-    JISPT100_TYPE2 = 0x26   # JIS Pt100    0C ~ 100C
-    JISPT100_TYPE3 = 0x27   # JIS Pt100    0C ~ 200C
-    JISPT100_TYPE4 = 0x28   # JIS Pt100    0C ~ 400C
-    JISPT100_TYPE5 = 0x29   # JIS Pt100 -200C ~ 200C
-    PT1000_TYPE = 0x2a      # Pt1000     -40C ~ 160C
-    BALCO500_TYPE1 = 0x2b   # BALCO500   -30C ~ 120C
-    Ni604_TYPE1 = 0x2c      # Ni         -80C ~ 100C
-    Ni604_TYPE2 = 0x2d      # Ni           0C ~ 100C
+    BIPOLAR_10V     = 0x07  # bipolar +/-10V
+    BIPOLAR_5V      = 0x08  # bipolar +/-5V
+    BIPOLAR_2V5     = 0x09  # bipolar +/-2.5V
+    BIPOLAR_1V      = 0x0a  # bipolar +/-1V
+    BIPOLAR_500MV   = 0x0b  # bipolar +/-500mV
+    BIPOLAR_150MV   = 0x0c  # bipolar +/-150mV
+    UNIPOLAR_20MA   = 0x0d  # unipolar 0-20mA (250 ohms)
+    BIPOLAR_20MA    = 0x0e  # bipolar 4-20mA (250 ohms)
+    THERMOCOUPLE_J  = 0x0F  # T/C J type
+    THERMOCOUPLE_K  = 0x10  # T/C K type
+    THERMOCOUPLE_T  = 0x11  # T/C T type
+    THERMOCOUPLE_E  = 0x12  # T/C E type
+    THERMOCOUPLE_R  = 0x12  # T/C R type
+    THERMOCOUPLE_S  = 0x14  # T/C S type
+    THERMOCOUPLE_B  = 0x15  # T/C B type
+    IECPT100_TYPE1  = 0x20  # IEC Pt100  -50C ~ 150C
+    IECPT100_TYPE2  = 0x21  # IEC Pt100    0C ~ 100C
+    IECPT100_TYPE3  = 0x22  # IEC Pt100    0C ~ 200C
+    IECPT100_TYPE4  = 0x23  # IEC Pt100    0C ~ 400C
+    IECPT100_TYPE5  = 0x24  # IEC Pt100 -200C ~ 200C
+    JISPT100_TYPE1  = 0x25  # JIS Pt100  -50C ~ 150C
+    JISPT100_TYPE2  = 0x26  # JIS Pt100    0C ~ 100C
+    JISPT100_TYPE3  = 0x27  # JIS Pt100    0C ~ 200C
+    JISPT100_TYPE4  = 0x28  # JIS Pt100    0C ~ 400C
+    JISPT100_TYPE5  = 0x29  # JIS Pt100 -200C ~ 200C
+    PT1000          = 0x2a  # Pt1000     -40C ~ 160C
+    BALCO500_TYPE1  = 0x2b  # BALCO500   -30C ~ 120C
+    Ni604_TYPE1     = 0x2c  # Ni         -80C ~ 100C
+    Ni604_TYPE2     = 0x2d  # Ni           0C ~ 100C
 
 
 def int_to_temp(value: int, scale: float = 1370.0):
@@ -312,3 +313,43 @@ class USBDAQ(E5KDAQ):
             buf = bytes(self.ep1.read(PACKET_SIZE))
             rsp += buf[:rsplen - len(rsp)]
         return rsp
+
+    def read_input_registers(self, addr: int, count: int, regtype: type = int) -> list[int]:
+        '''Read a set of MODBUS input registers
+
+        addr -- starting address
+        count -- number of registers to read
+        regtype -- optional type for returning register values
+        '''
+        req = struct.pack('>BBHH', self.id, ModbusFunction.ReadInputRegisters, addr, count)
+        rsp = self.send_request(req)
+        # TODO: Handle errors
+        return [regtype(x) for x in struct.unpack(f'>3x{count}h', rsp)]
+
+    def read_analogue_input_types(self) -> list[ChannelType]:
+        n = self.info.num_analogue_input_channels
+        if n == 0:
+            return []
+        return self.read_input_registers(348, n, ChannelType)
+
+    def read_analogue_inputs(self) -> Array[float]:
+        req = f'#{self.id:02x}\r'.encode()
+        rsp = self.send_request(req)
+        return Array('d', [float(rsp[o:o+7]) for o in range(1, len(rsp)-2, 7)])
+
+    def read_discrete_inputs(self, addr: int, count: int) -> Array['b']:
+        req = struct.pack('>BBHH', self.id, ModbusFunction.ReadCoils, addr, count)
+        rsp = self.send_request(req)
+        print(rsp.hex(' '))
+        bits = int.from_bytes(rsp[3:], byteorder='little', signed=False)
+        return Array('B', [((bits >> i) & 1) for i in range(count)])
+
+    def write_discrete_inputs(self, addr: int, data: list):
+        bits = 0
+        bit_count = len(data)
+        for x in reversed(data):
+            bits = (bits << 1) | (1 if x else 0)
+        byte_count = (bit_count + 7) // 8
+        values = bits.to_bytes(byte_count, byteorder='little', signed=False)
+        req = struct.pack('>BBHHB', self.id, ModbusFunction.WriteMultipleCoils, addr, len(data), byte_count) + values
+        self.send_request(req)
