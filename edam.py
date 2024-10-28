@@ -7,8 +7,10 @@ def hex_to_str(data: bytes) -> str:
 
 
 def main():
-    daq = e5kdaq.USBDAQ(0)
+    daq = e5kdaq.USBDAQ()
     daq.open()
+    # daq = e5kdaq.NetworkDAQ()
+    # daq.open('192.168.1.11')
 
     for name, prop in type(daq).__dict__.items():
         if isinstance(prop, e5kdaq.ReaderProperty):
@@ -59,7 +61,7 @@ def main():
 
     send_asc_request('$016', 'Read channel enable/disable status')
 
-    daq.set_ip_address('192.168.1.11', '192.168.1.1', '255.255.255.255')
+    # daq.set_ip_address('192.168.1.11', '192.168.1.1', '255.255.255.255')
 
     # def send_modbus_request(id: int, command: int, addr: int, args: bytes):
 

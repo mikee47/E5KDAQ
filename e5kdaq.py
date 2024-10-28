@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from collections.abc import Sequence
 from array import array as Array
 from ipaddress import IPv4Address
+import socket
 
 PACKET_SIZE = 64
 
@@ -318,17 +319,6 @@ class E5KDAQ:
     '''Python implementation of InLog E5KDAQ interface.
     Communication method is abstracted to an inherited class.
     '''
-    def __init__(self, device_id: int):
-        self.device_id = device_id
-
-    def flush(self):
-        raise NotImplemented()
-
-    def send_request(self, request: bytes) -> bytes:
-        raise NotImplemented()
-
-
-class USBDAQ(E5KDAQ):
     version = ReaderProperty('$F')
     ipaddr = ReaderProperty('$IP')
     gateway = ReaderProperty('$GATE')
@@ -339,16 +329,8 @@ class USBDAQ(E5KDAQ):
     analogue_inputs_max = ReaderProperty('#MH', 1)
     analogue_inputs_min = ReaderProperty('#ML', 1)
 
-    def open(self):
-        self.dev = usb.core.find(idVendor=0x04b4, idProduct=0x8613)
-        # print(dev)
-        assert self.dev
-        # dev.set_configuration()
-        cfg = self.dev.get_active_configuration()
-        intf = cfg.interfaces()[0]
-        self.ep0, self.ep1 = intf.endpoints()[0:2]
-        self.flush
-        self.read_device_info()
+    def send_request(self, request: bytes) -> bytes:
+        raise NotImplemented()
 
     def read_prop(self, req: str, rsp_hdrlen: int):
         req = req[0] + f'{self.id:02X}' + req[1:] + '\r'
@@ -365,30 +347,6 @@ class USBDAQ(E5KDAQ):
     @property
     def info(self) -> ModelInfo:
         return MODELINFO[self.model]
-
-    def flush(self):
-        try:
-            while True:
-                self.ep1.read(64, timeout=50)
-        except usb.core.USBTimeoutError:
-            pass
-
-    def send_request(self, request: bytes) -> bytes:
-        '''Send a request and return response'''
-        MAGIC = 0x77553388
-        PACKET_SIZE = 64
-        # MAGIC: 88 33 55 77 .3Uw
-        buf = struct.pack('<LH', MAGIC, len(request)) + request
-        packet_count = (len(buf) + PACKET_SIZE - 1) // PACKET_SIZE
-        self.ep0.write(buf.ljust(packet_count * PACKET_SIZE, b'\0'))
-        # First response packet contains actual length: use that instead of timeout
-        buf = bytes(self.ep1.read(PACKET_SIZE))
-        hdr, rsplen = struct.unpack('<LH', buf[:6])
-        rsp = buf[6:6+rsplen]
-        while len(rsp) < rsplen:
-            buf = bytes(self.ep1.read(PACKET_SIZE))
-            rsp += buf[:rsplen - len(rsp)]
-        return rsp
 
     def send_config_request(self, code: int):
         '''Send internal configuration request
@@ -468,3 +426,54 @@ class USBDAQ(E5KDAQ):
         setaddr('IP', ipaddr)
         setaddr('GATE', gateway)
         setaddr('MASK', netmask)
+
+
+class USBDAQ(E5KDAQ):
+    def open(self):
+        self.dev = usb.core.find(idVendor=0x04b4, idProduct=0x8613)
+        # print(dev)
+        assert self.dev
+        # dev.set_configuration()
+        cfg = self.dev.get_active_configuration()
+        intf = cfg.interfaces()[0]
+        self.ep0, self.ep1 = intf.endpoints()[0:2]
+        self.flush
+        self.read_device_info()
+
+    def flush(self):
+        try:
+            while True:
+                self.ep1.read(64, timeout=50)
+        except usb.core.USBTimeoutError:
+            pass
+
+    def send_request(self, request: bytes) -> bytes:
+        '''Send a request and return response'''
+        MAGIC = 0x77553388
+        PACKET_SIZE = 64
+        # MAGIC: 88 33 55 77 .3Uw
+        buf = struct.pack('<LH', MAGIC, len(request)) + request
+        packet_count = (len(buf) + PACKET_SIZE - 1) // PACKET_SIZE
+        self.ep0.write(buf.ljust(packet_count * PACKET_SIZE, b'\0'))
+        # First response packet contains actual length: use that instead of timeout
+        buf = bytes(self.ep1.read(PACKET_SIZE))
+        hdr, rsplen = struct.unpack('<LH', buf[:6])
+        rsp = buf[6:6+rsplen]
+        while len(rsp) < rsplen:
+            buf = bytes(self.ep1.read(PACKET_SIZE))
+            rsp += buf[:rsplen - len(rsp)]
+        return rsp
+
+
+class NetworkDAQ(E5KDAQ):
+    def open(self, ipaddr: any):
+        self.socket_udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.socket_udp.settimeout(2)
+        self.socket_udp.connect((ipaddr, 1025))
+        self.read_device_info()
+
+    def send_request(self, request: bytes) -> bytes:
+        '''Send a request and return response'''
+        self.socket_udp.send(request)
+        rsp = self.socket_udp.recv(PACKET_SIZE * 33)
+        return rsp
