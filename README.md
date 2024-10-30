@@ -1,7 +1,5 @@
 # E5KDAQ
 
-STATUS: Currently a work-in-progress.
-
 Python port of interface library with USB support for EDAM-5019 DAQ.
 Aimed primarily at GNU/Linux systems using the [`pyusb`](https://github.com/pyusb) library.
 
@@ -12,3 +10,8 @@ The high-level API is mostly documented but it's not particularly clear how thin
 The USB interface presents as `ID 04b4:8613 Cypress Semiconductor Corp. CY7C68013 EZ-USB FX2 USB 2.0 Development Kit` with four endpoints `BULK OUT`, `BULK IN`, `Interrupt`, `Isochronous`.
 
 The tricky work here is digging into the `E5KDAQ.DLL` windows library to determine how the device is accessed via USB. This hasn't been obfuscated but it's a pity the source code for this isn't made available.
+
+Using
+-----
+
+The library is in `e5kday.py`. Its use is demonstrated in `edam.py`. Note that network onnections are also supported.
